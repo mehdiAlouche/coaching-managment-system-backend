@@ -11,11 +11,29 @@ export interface IOrganizationSettings {
   [key: string]: unknown;
 }
 
+export interface IOrganizationContact {
+  email?: string;
+  phone?: string;
+  address?: string;
+  website?: string;
+}
+
+export interface IOrganizationPreferences {
+  branding?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+  };
+  communication?: Record<string, unknown>;
+}
+
 export interface IOrganization extends Document {
   name: string;
   slug: string;
   isActive: boolean;
   settings: IOrganizationSettings;
+  contact?: IOrganizationContact;
+  preferences?: IOrganizationPreferences;
+  logoPath?: string;
   subscriptionPlan: SubscriptionPlan;
   subscriptionStatus: SubscriptionStatus;
   subscriptionRenewalAt?: Date;
@@ -34,6 +52,20 @@ const OrgSchema = new Schema<IOrganization>(
       type: Schema.Types.Mixed,
       default: {},
     },
+    contact: {
+      type: {
+        email: { type: String, lowercase: true },
+        phone: { type: String },
+        address: { type: String },
+        website: { type: String },
+      },
+      default: {},
+    },
+    preferences: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+    logoPath: { type: String },
     subscriptionPlan: {
       type: String,
       enum: ['free', 'standard', 'premium'],

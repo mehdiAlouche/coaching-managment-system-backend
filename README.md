@@ -70,7 +70,7 @@ npm install
 cp env.example .env
 ```
 - Required variables:
-  - `PORT` — server port (default 3000)
+  - `PORT` — server port (default 5000)
   - `MONGO_URI` — MongoDB connection string (e.g., `mongodb://localhost:27017/cms`)
   - `JWT_SECRET` — secret for signing JWT tokens
 
@@ -88,7 +88,7 @@ npm start
 You should see logs similar to:
 ```
 MongoDB connected
-Server listening on port 3000
+Server listening on port 5000
 ```
 
 ### NPM scripts
@@ -100,7 +100,7 @@ Server listening on port 3000
 ### Environment
 Example `.env` file:
 ```env
-PORT=3000
+PORT=5000
 MONGO_URI=mongodb://localhost:27017/cms
 JWT_SECRET=dev-secret
 ```
@@ -121,7 +121,7 @@ Note: Several handlers are scaffolds/stubs intended to be implemented (see `modu
 
 Example request:
 ```bash
-curl -X GET http://localhost:3000/api/v1/users \
+curl -X GET http://localhost:5000/api/v1/users \
   -H "Authorization: Bearer <your-jwt>"
 ```
 

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { UserRole } from '../../_shared/enums/userRoles';
 
 // Common schemas
 const passwordSchema = z
@@ -63,9 +62,15 @@ export const createGoalSchema = z.object({
 
 export const updateGoalSchema = z.object({
   params: z.object({
-    id: z.string(),
+    goalId: z.string(),
   }),
   body: createGoalSchema.shape.body.partial(),
+});
+
+export const goalParamsSchema = z.object({
+  params: z.object({
+    goalId: z.string(),
+  }),
 });
 
 // Session schemas
@@ -92,9 +97,15 @@ export const createSessionSchema = z.object({
 
 export const updateSessionSchema = z.object({
   params: z.object({
-    id: z.string(),
+    sessionId: z.string(),
   }),
   body: createSessionSchema.shape.body.partial(),
+});
+
+export const sessionParamsSchema = z.object({
+  params: z.object({
+    sessionId: z.string(),
+  }),
 });
 
 // Payment schemas
@@ -118,7 +129,145 @@ export const createPaymentSchema = z.object({
 
 export const updatePaymentSchema = z.object({
   params: z.object({
-    id: z.string(),
+    paymentId: z.string(),
   }),
-  body: createPaymentSchema.shape.body.partial(),
+  body: z.object({
+    status: z.enum(['pending', 'paid', 'failed', 'refunded', 'void']).optional(),
+    invoiceUrl: z.string().url().optional(),
+    paidAt: z.string().datetime().optional(),
+    remindersSent: z
+      .array(
+        z.object({
+          sentAt: z.string().datetime(),
+          type: z.enum(['email', 'sms', 'in_app']),
+        })
+      )
+      .optional(),
+    notes: z.string().optional(),
+  }),
+});
+
+export const paymentParamsSchema = z.object({
+  params: z.object({
+    paymentId: z.string(),
+  }),
+});
+
+// User schemas
+export const createUserSchema = z.object({
+  body: z.object({
+    email: emailSchema,
+    password: passwordSchema,
+    role: z.enum(['manager', 'coach', 'entrepreneur', 'admin'] as const),
+    firstName: z.string().min(1, 'First name is required'),
+    lastName: z.string().min(1, 'Last name is required'),
+    hourlyRate: z.number().positive().optional(),
+    startupName: z.string().optional(),
+    phone: z.string().optional(),
+    timezone: z.string().optional(),
+  }),
+});
+
+export const updateUserSchema = z.object({
+  params: z.object({
+    userId: z.string(),
+  }),
+  body: createUserSchema.shape.body.partial().extend({
+    password: passwordSchema.optional(),
+    isActive: z.boolean().optional(),
+  }),
+});
+
+export const userParamsSchema = z.object({
+  params: z.object({
+    userId: z.string(),
+  }),
+});
+
+export const userRoleUpdateSchema = z.object({
+  params: z.object({
+    userId: z.string(),
+  }),
+  body: z.object({
+    role: z.enum(['manager', 'coach', 'entrepreneur', 'admin'] as const),
+  }),
+});
+
+// Organization schemas
+export const organizationUpdateSchema = z.object({
+  body: z.object({
+    name: z.string().min(2).optional(),
+    slug: z.string().min(2).optional(),
+    billingEmail: emailSchema.optional(),
+    contact: z
+      .object({
+        email: emailSchema.optional(),
+        phone: z.string().optional(),
+        address: z.string().optional(),
+        website: z.string().url().optional(),
+      })
+      .optional(),
+    settings: z.record(z.string(), z.any()).optional(),
+    preferences: z.record(z.string(), z.any()).optional(),
+    isActive: z.boolean().optional(),
+  }),
+});
+
+// Roles schemas
+const roleBodySchema = z.object({
+  name: z.string().min(2),
+  slug: z.string().min(2).optional(),
+  description: z.string().optional(),
+  permissions: z.array(z.string()).optional(),
+});
+
+export const createRoleSchema = z.object({
+  body: roleBodySchema,
+});
+
+export const updateRoleSchema = z.object({
+  params: z.object({
+    roleId: z.string(),
+  }),
+  body: roleBodySchema.partial(),
+});
+
+export const roleParamsSchema = z.object({
+  params: z.object({
+    roleId: z.string(),
+  }),
+});
+
+// Session notes
+export const sessionNoteSchema = z.object({
+  params: z.object({
+    sessionId: z.string(),
+  }),
+  body: z.object({
+    summary: z.string().min(1, 'Summary is required'),
+    details: z.string().optional(),
+    visibility: z.enum(['internal', 'shared']).optional(),
+    followUpTasks: z
+      .array(
+        z.object({
+          description: z.string().min(1),
+          dueDate: z.string().datetime().optional(),
+          completed: z.boolean().optional(),
+        })
+      )
+      .optional(),
+    attendance: z
+      .object({
+        present: z.boolean(),
+        notes: z.string().optional(),
+      })
+      .optional(),
+  }),
+});
+
+// Notifications
+export const notificationParamsSchema = z.object({
+  params: z.object({
+    notificationId: z.string(),
+  }),
 });
