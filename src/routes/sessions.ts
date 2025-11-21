@@ -56,10 +56,19 @@ router.get(
         .skip(skip)
         .limit(limit)
         .select('-notes.privateNotes -attachments')
-        .populate('coachId', 'firstName lastName email')
-        .populate('entrepreneurId', 'firstName lastName email startupName')
-        .populate('managerId', 'firstName lastName email')
-        .lean();
+        .populate({ path: 'coachId', select: 'firstName lastName email' })
+        .populate({ path: 'entrepreneurId', select: 'firstName lastName email startupName', options: { lean: true } })
+        .populate({ path: 'managerId', select: 'firstName lastName email', options: { lean: true } })
+        .lean()
+        .then((sessions) => 
+          sessions.map((session: any) => ({
+            ...session,
+            entrepreneur: session.entrepreneurId,
+            manager: session.managerId,
+            entrepreneurId: undefined,
+            managerId: undefined,
+          }))
+        );
 
       const total = await SessionModel.countDocuments(query);
 
@@ -92,7 +101,17 @@ router.get(
         .populate('entrepreneurId', 'firstName lastName email startupName')
         .populate('managerId', 'firstName lastName email')
         .populate('paymentId')
-        .lean();
+        .lean()
+        .then((session: any) => {
+          if (!session) return null;
+          return {
+            ...session,
+            entrepreneur: session.entrepreneurId,
+            manager: session.managerId,
+            entrepreneurId: undefined,
+            managerId: undefined,
+          };
+        });
 
       if (!session) {
         return res.status(404).json({ message: 'Session not found' });
@@ -161,7 +180,16 @@ router.post(
         .populate('coachId', 'firstName lastName email')
         .populate('entrepreneurId', 'firstName lastName email startupName')
         .populate('managerId', 'firstName lastName email')
-        .lean();
+        .lean()
+        .then((session: any) => ({
+          ...session,
+          entrepreneur: session.entrepreneurId,
+          manager: session.managerId,
+          coach: session.coachId,
+          entrepreneurId: undefined,
+          managerId: undefined,
+          coachId: undefined,
+        }));
 
       res.status(201).json(populatedSession);
     } catch (err) {
@@ -285,7 +313,14 @@ router.patch(
         .populate('coachId', 'firstName lastName email')
         .populate('entrepreneurId', 'firstName lastName email startupName')
         .populate('managerId', 'firstName lastName email')
-        .lean();
+        .lean()
+        .then((session: any) => ({
+          ...session,
+          entrepreneur: session.entrepreneurId,
+          manager: session.managerId,
+          entrepreneurId: undefined,
+          managerId: undefined,
+        }));
 
       res.json(updatedSession);
     } catch (err) {
@@ -405,7 +440,15 @@ router.post(
         ],
       })
         .populate('entrepreneurId', 'firstName lastName')
-        .lean();
+        .lean()
+        .then((session: any) => {
+          if (!session) return null;
+          return {
+            ...session,
+            entrepreneur: session.entrepreneurId,
+            entrepreneurId: undefined,
+          };
+        });
 
       res.json({
         success: true,
@@ -473,7 +516,16 @@ router.get(
       .populate('coachId', 'firstName lastName email')
       .populate('entrepreneurId', 'firstName lastName email startupName')
       .populate('managerId', 'firstName lastName email')
-      .lean();
+      .lean()
+      .then((sessions) => 
+        sessions.map((session: any) => ({
+          ...session,
+          entrepreneur: session.entrepreneurId,
+          manager: session.managerId,
+          entrepreneurId: undefined,
+          managerId: undefined,
+        }))
+      );
 
     // Group by date
     const calendar: Record<string, any[]> = {};
@@ -543,7 +595,14 @@ router.post(
       .populate('entrepreneurId', 'firstName lastName email startupName')
       .populate('managerId', 'firstName lastName email')
       .populate('rating.ratedBy', 'firstName lastName')
-      .lean();
+      .lean()
+      .then((session: any) => ({
+        ...session,
+        entrepreneur: session.entrepreneurId,
+        manager: session.managerId,
+        entrepreneurId: undefined,
+        managerId: undefined,
+      }));
 
     res.json({ success: true, data: updatedSession });
   })
@@ -601,7 +660,14 @@ router.patch(
       .populate('coachId', 'firstName lastName email')
       .populate('entrepreneurId', 'firstName lastName email startupName')
       .populate('managerId', 'firstName lastName email')
-      .lean();
+      .lean()
+      .then((session: any) => ({
+        ...session,
+        entrepreneur: session.entrepreneurId,
+        manager: session.managerId,
+        entrepreneurId: undefined,
+        managerId: undefined,
+      }));
 
     res.json({ success: true, data: updatedSession });
   })
