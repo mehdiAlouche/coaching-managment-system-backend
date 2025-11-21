@@ -271,3 +271,109 @@ export const notificationParamsSchema = z.object({
     notificationId: z.string(),
   }),
 });
+
+// Session extensions
+export const sessionStatusSchema = z.object({
+  params: z.object({
+    sessionId: z.string(),
+  }),
+  body: z.object({
+    status: z.enum(['scheduled', 'rescheduled', 'in_progress', 'completed', 'cancelled', 'no_show']),
+  }),
+});
+
+export const sessionConflictSchema = z.object({
+  body: z.object({
+    coachId: z.string(),
+    scheduledAt: z.string().datetime(),
+    duration: z.number().int().positive(),
+    excludeSessionId: z.string().optional(),
+  }),
+});
+
+export const sessionRatingSchema = z.object({
+  params: z.object({
+    sessionId: z.string(),
+  }),
+  body: z.object({
+    score: z.number().int().min(1).max(5),
+    comment: z.string().optional(),
+  }),
+});
+
+export const sessionNotesUpdateSchema = z.object({
+  params: z.object({
+    sessionId: z.string(),
+  }),
+  body: z.object({
+    role: z.enum(['coach', 'entrepreneur', 'manager']),
+    notes: z.string().min(1),
+  }),
+});
+
+// Goal extensions
+export const goalProgressSchema = z.object({
+  params: z.object({
+    goalId: z.string(),
+  }),
+  body: z.object({
+    progress: z.number().int().min(0).max(100),
+  }),
+});
+
+export const milestoneUpdateSchema = z.object({
+  params: z.object({
+    goalId: z.string(),
+    milestoneId: z.string(),
+  }),
+  body: z.object({
+    status: z.enum(['not_started', 'in_progress', 'completed', 'blocked']),
+    notes: z.string().optional(),
+  }),
+});
+
+export const goalCommentSchema = z.object({
+  params: z.object({
+    goalId: z.string(),
+  }),
+  body: z.object({
+    text: z.string().min(1),
+  }),
+});
+
+export const goalCollaboratorSchema = z.object({
+  params: z.object({
+    goalId: z.string(),
+  }),
+  body: z.object({
+    userId: z.string(),
+    role: z.string().optional(),
+  }),
+});
+
+export const goalSessionLinkSchema = z.object({
+  params: z.object({
+    goalId: z.string(),
+    sessionId: z.string(),
+  }),
+});
+
+// Payment extensions
+export const generatePaymentSchema = z.object({
+  body: z.object({
+    coachId: z.string(),
+    sessionIds: z.array(z.string()).min(1),
+    notes: z.string().optional(),
+  }),
+});
+
+export const markPaidSchema = z.object({
+  params: z.object({
+    paymentId: z.string(),
+  }),
+  body: z.object({
+    paymentMethod: z.string().optional(),
+    paymentReference: z.string().optional(),
+    paidAt: z.string().datetime().optional(),
+  }),
+});

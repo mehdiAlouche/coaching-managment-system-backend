@@ -11,8 +11,15 @@ import {
   createSessionSchema,
   updateSessionSchema,
   sessionParamsSchema,
+  sessionStatusSchema,
+  sessionConflictSchema,
+  sessionRatingSchema,
+  sessionNotesUpdateSchema,
 } from '../modules/validation/schemas';
 import { buildPagination } from '../_shared/utils/pagination';
+import { asyncHandler } from '../middleware/errorHandler';
+import { ErrorFactory } from '../_shared/errors/AppError';
+import { HttpStatus } from '../_shared/enums/httpStatus';
 
 const router = Router();
 
@@ -316,6 +323,288 @@ router.delete(
       res.status(500).json({ message: 'Failed to delete session' });
     }
   }
+);
+
+// PATCH /sessions/:sessionId/status - Update session status
+router.patch(
+  '/:sessionId/status',
+  requireAuth,
+  requireSameOrganization,
+  validate(sessionStatusSchema),
+  requireRole('admin', 'manager', 'coach'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const orgId = req.user?.organizationId;
+    const { sessionId } = req.params;
+    const { status } = req.body;
+
+    const session = await SessionModel.findOne({
+      _id: sessionId,
+      organizationId: orgId,
+    });
+
+    if (!session) {
+      throw ErrorFactory.notFound('Session not found', 'SESSION_NOT_FOUND');
+    }
+
+    // Update status
+    session.status = status;
+
+    // If marking as completed, set endTime if not already set
+    if (status === 'completed' && !session.endTime) {
+      session.endTime = new Date();
+    }
+
+    await session.save();
+
+    const updatedSession = await SessionModel.findById(session._id)
+      .populate('coachId', 'firstName lastName email')
+      .populate('entrepreneurId', 'firstName lastName email startupName')
+      .populate('managerId', 'firstName lastName email')
+      .lean();
+
+    res.json({ success: true, data: updatedSession });
+  })
+);
+
+// POST /sessions/check-conflict - Check for scheduling conflicts
+router.post(
+  '/check-conflict',
+  requireAuth,
+  requireSameOrganization,
+  validate(sessionConflictSchema),
+  requireRole('admin', 'manager', 'coach'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { coachId, scheduledAt, duration, excludeSessionId } = req.body;
+    const orgId = req.user?.organizationId;
+
+    // Verify coach exists
+    const coach = await UserModel.findOne({ _id: coachId, organizationId: orgId, role: 'coach' });
+    if (!coach) {
+      throw ErrorFactory.badRequest('Invalid coach ID', 'INVALID_COACH');
+    }
+
+    const scheduledAtDate = new Date(scheduledAt);
+    const endTime = new Date(scheduledAtDate.getTime() + duration * 60000);
+
+    const hasConflict = await SessionModel.checkConflict(
+      coachId,
+      scheduledAtDate,
+      endTime,
+      excludeSessionId
+    );
+
+    if (hasConflict) {
+      // Find the conflicting session
+      const conflictingSession = await SessionModel.findOne({
+        coachId: new Types.ObjectId(coachId),
+        status: { $in: ['scheduled', 'rescheduled', 'in_progress'] },
+        _id: excludeSessionId ? { $ne: new Types.ObjectId(excludeSessionId) } : undefined,
+        $or: [
+          { scheduledAt: { $lt: endTime }, endTime: { $gt: scheduledAtDate } },
+          { scheduledAt: { $gte: scheduledAtDate, $lt: endTime } },
+        ],
+      })
+        .populate('entrepreneurId', 'firstName lastName')
+        .lean();
+
+      res.json({
+        success: true,
+        data: {
+          hasConflict: true,
+          conflictingSession,
+        },
+      });
+    } else {
+      res.json({
+        success: true,
+        data: {
+          hasConflict: false,
+        },
+      });
+    }
+  })
+);
+
+// GET /sessions/calendar - Calendar view of sessions
+router.get(
+  '/calendar',
+  requireAuth,
+  requireSameOrganization,
+  requireRole('admin', 'manager', 'coach', 'entrepreneur'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const orgId = req.user?.organizationId;
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    
+    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const view = (req.query.view as string) || 'month';
+
+    // Calculate date range
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    // Build query
+    const query: any = {
+      organizationId: orgId,
+      scheduledAt: { $gte: startDate, $lte: endDate },
+    };
+
+    // Filter by role
+    if (userRole === 'coach') {
+      query.coachId = userId;
+    } else if (userRole === 'entrepreneur') {
+      query.entrepreneurId = userId;
+    }
+
+    // Additional filters
+    if (req.query.coachId) {
+      query.coachId = req.query.coachId;
+    }
+    if (req.query.entrepreneurId) {
+      query.entrepreneurId = req.query.entrepreneurId;
+    }
+    if (req.query.status) {
+      query.status = req.query.status;
+    }
+
+    const sessions = await SessionModel.find(query)
+      .sort({ scheduledAt: 1 })
+      .populate('coachId', 'firstName lastName email')
+      .populate('entrepreneurId', 'firstName lastName email startupName')
+      .populate('managerId', 'firstName lastName email')
+      .lean();
+
+    // Group by date
+    const calendar: Record<string, any[]> = {};
+    sessions.forEach((session) => {
+      const dateKey = session.scheduledAt.toISOString().split('T')[0];
+      if (!calendar[dateKey]) {
+        calendar[dateKey] = [];
+      }
+      calendar[dateKey].push(session);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        calendar,
+        month,
+        year,
+        view,
+        total: sessions.length,
+      },
+    });
+  })
+);
+
+// POST /sessions/:sessionId/rating - Add session rating
+router.post(
+  '/:sessionId/rating',
+  requireAuth,
+  requireSameOrganization,
+  validate(sessionRatingSchema),
+  requireRole('admin', 'manager', 'coach', 'entrepreneur'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const orgId = req.user?.organizationId;
+    const userId = req.user?.userId;
+    const { sessionId } = req.params;
+    const { score, comment } = req.body;
+
+    const session = await SessionModel.findOne({
+      _id: sessionId,
+      organizationId: orgId,
+    });
+
+    if (!session) {
+      throw ErrorFactory.notFound('Session not found', 'SESSION_NOT_FOUND');
+    }
+
+    // Only allow rating completed sessions
+    if (session.status !== 'completed') {
+      throw ErrorFactory.badRequest(
+        'Can only rate completed sessions',
+        'SESSION_NOT_COMPLETED'
+      );
+    }
+
+    // Update rating
+    session.rating = {
+      score,
+      comment,
+      ratedBy: new Types.ObjectId(userId),
+      ratedAt: new Date(),
+    };
+
+    await session.save();
+
+    const updatedSession = await SessionModel.findById(session._id)
+      .populate('coachId', 'firstName lastName email')
+      .populate('entrepreneurId', 'firstName lastName email startupName')
+      .populate('managerId', 'firstName lastName email')
+      .populate('rating.ratedBy', 'firstName lastName')
+      .lean();
+
+    res.json({ success: true, data: updatedSession });
+  })
+);
+
+// PATCH /sessions/:sessionId/notes - Add role-based notes
+router.patch(
+  '/:sessionId/notes',
+  requireAuth,
+  requireSameOrganization,
+  validate(sessionNotesUpdateSchema),
+  requireRole('admin', 'manager', 'coach', 'entrepreneur'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const orgId = req.user?.organizationId;
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    const { sessionId } = req.params;
+    const { role, notes } = req.body;
+
+    const session = await SessionModel.findOne({
+      _id: sessionId,
+      organizationId: orgId,
+    });
+
+    if (!session) {
+      throw ErrorFactory.notFound('Session not found', 'SESSION_NOT_FOUND');
+    }
+
+    // Verify user has permission to add notes for this role
+    if (role === 'coach' && userRole !== 'coach' && userRole !== 'manager' && userRole !== 'admin') {
+      throw ErrorFactory.forbidden('Cannot add coach notes', 'INSUFFICIENT_PERMISSIONS');
+    }
+
+    if (role === 'entrepreneur' && userRole !== 'entrepreneur' && userRole !== 'manager' && userRole !== 'admin') {
+      throw ErrorFactory.forbidden('Cannot add entrepreneur notes', 'INSUFFICIENT_PERMISSIONS');
+    }
+
+    // Initialize notes object if needed
+    if (!session.notes) {
+      session.notes = {};
+    }
+
+    // Add role-specific notes
+    if (role === 'coach') {
+      session.notes.coachNotes = notes;
+    } else if (role === 'entrepreneur') {
+      session.notes.entrepreneurNotes = notes;
+    } else if (role === 'manager') {
+      session.notes.managerNotes = notes;
+    }
+
+    await session.save();
+
+    const updatedSession = await SessionModel.findById(session._id)
+      .populate('coachId', 'firstName lastName email')
+      .populate('entrepreneurId', 'firstName lastName email startupName')
+      .populate('managerId', 'firstName lastName email')
+      .lean();
+
+    res.json({ success: true, data: updatedSession });
+  })
 );
 
 export default router;

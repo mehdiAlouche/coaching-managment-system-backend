@@ -409,6 +409,135 @@ export const manualEndpoints = {
         },
       },
     },
+    '/sessions/check-conflict': {
+      post: {
+        summary: 'Check for scheduling conflicts',
+        description: 'Check if a coach has a conflicting session at the specified time. Returns conflict status and details.',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['coachId', 'scheduledAt', 'duration'],
+                properties: {
+                  coachId: { type: 'string', format: 'ObjectId', description: 'Coach ID to check' },
+                  scheduledAt: { type: 'string', format: 'date-time', description: 'Proposed session start time' },
+                  duration: { type: 'number', description: 'Duration in minutes' },
+                  excludeSessionId: { type: 'string', format: 'ObjectId', description: 'Optional session ID to exclude (for updates)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Conflict check completed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        hasConflict: { type: 'boolean' },
+                        conflictingSession: { $ref: '#/components/schemas/Session' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Validation error' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+        },
+      },
+    },
+    '/sessions/calendar': {
+      get: {
+        summary: 'Get calendar view of sessions',
+        description: 'Get sessions grouped by date for calendar visualization. Supports filtering by month, year, coach, entrepreneur, and status.',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'month',
+            in: 'query',
+            schema: { type: 'number', minimum: 1, maximum: 12 },
+            description: 'Month (1-12, default: current month)',
+          },
+          {
+            name: 'year',
+            in: 'query',
+            schema: { type: 'number' },
+            description: 'Year (default: current year)',
+          },
+          {
+            name: 'view',
+            in: 'query',
+            schema: { type: 'string', enum: ['month'], default: 'month' },
+            description: 'View type (currently only month supported)',
+          },
+          {
+            name: 'coachId',
+            in: 'query',
+            schema: { type: 'string', format: 'ObjectId' },
+            description: 'Filter by coach',
+          },
+          {
+            name: 'entrepreneurId',
+            in: 'query',
+            schema: { type: 'string', format: 'ObjectId' },
+            description: 'Filter by entrepreneur',
+          },
+          {
+            name: 'status',
+            in: 'query',
+            schema: { type: 'string', enum: ['scheduled', 'rescheduled', 'in_progress', 'completed', 'cancelled', 'no_show'] },
+            description: 'Filter by status',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Calendar view retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        calendar: {
+                          type: 'object',
+                          additionalProperties: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/Session' },
+                          },
+                          description: 'Sessions grouped by date (YYYY-MM-DD)',
+                        },
+                        month: { type: 'number' },
+                        year: { type: 'number' },
+                        total: { type: 'number' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid month or year' },
+          401: { description: 'Unauthorized' },
+        },
+      },
+    },
     '/sessions/{sessionId}': {
       get: {
         summary: 'Get one session',
@@ -916,6 +1045,631 @@ export const manualEndpoints = {
           400: { description: 'Validation error' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden' },
+        },
+      },
+    },
+    '/goals/{goalId}/progress': {
+      patch: {
+        summary: 'Update goal progress',
+        description: 'Update goal progress percentage (0-100). Logs change in update log. Available to admin, manager, coach, and entrepreneur.',
+        tags: ['Goals'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'goalId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['progress'],
+                properties: {
+                  progress: {
+                    type: 'number',
+                    minimum: 0,
+                    maximum: 100,
+                    description: 'Progress percentage',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Goal progress updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Goal' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid progress value' },
+          404: { description: 'Goal not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - access denied' },
+        },
+      },
+    },
+    '/goals/{goalId}/milestones/{milestoneId}': {
+      patch: {
+        summary: 'Update milestone status',
+        description: 'Update milestone status. Auto-sets completedAt when marked as completed. Recalculates goal progress based on completed milestones.',
+        tags: ['Goals'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'goalId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+          {
+            name: 'milestoneId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: {
+                    type: 'string',
+                    enum: ['not_started', 'in_progress', 'completed', 'blocked'],
+                    description: 'New milestone status',
+                  },
+                  notes: {
+                    type: 'string',
+                    description: 'Optional notes about the status change',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Milestone status updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Goal' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Goal or milestone not found' },
+          400: { description: 'Invalid status' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - access denied' },
+        },
+      },
+    },
+    '/goals/{goalId}/comments': {
+      post: {
+        summary: 'Add comment to goal',
+        description: 'Add a comment with timestamp to a goal. Available to all roles with goal access.',
+        tags: ['Goals'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'goalId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['text'],
+                properties: {
+                  text: {
+                    type: 'string',
+                    description: 'Comment text',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Comment added successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Goal' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Validation error' },
+          404: { description: 'Goal not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - access denied' },
+        },
+      },
+    },
+    '/goals/{goalId}/collaborators': {
+      post: {
+        summary: 'Add collaborator to goal',
+        description: 'Add a user as a collaborator on a goal. Prevents duplicate collaborators. Requires admin, manager, or coach role.',
+        tags: ['Goals'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'goalId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['userId'],
+                properties: {
+                  userId: {
+                    type: 'string',
+                    format: 'ObjectId',
+                    description: 'User ID to add as collaborator',
+                  },
+                  role: {
+                    type: 'string',
+                    default: 'contributor',
+                    description: 'Collaborator role',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Collaborator added successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Goal' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Validation error or user not in organization' },
+          404: { description: 'Goal or user not found' },
+          409: { description: 'User is already a collaborator' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+        },
+      },
+    },
+    '/goals/{goalId}/sessions/{sessionId}': {
+      post: {
+        summary: 'Link session to goal',
+        description: 'Associate a session with a goal. Prevents duplicate links. Requires admin, manager, or coach role.',
+        tags: ['Goals'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'goalId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+          {
+            name: 'sessionId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        responses: {
+          201: {
+            description: 'Session linked to goal successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Goal' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Goal or session not found' },
+          409: { description: 'Session already linked to this goal' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+        },
+      },
+    },
+    '/payments/generate': {
+      post: {
+        summary: 'Generate payment from sessions',
+        description: 'Auto-generate payment invoice from completed sessions. Validates sessions, calculates totals with 8% tax, auto-generates invoice number. Requires admin or manager role.',
+        tags: ['Payments'],
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['coachId', 'sessionIds'],
+                properties: {
+                  coachId: {
+                    type: 'string',
+                    format: 'ObjectId',
+                    description: 'Coach ID to generate payment for',
+                  },
+                  sessionIds: {
+                    type: 'array',
+                    items: { type: 'string', format: 'ObjectId' },
+                    description: 'Array of completed session IDs',
+                  },
+                  notes: {
+                    type: 'string',
+                    description: 'Optional notes for the invoice',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Payment generated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Payment' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Validation error - sessions not completed or belong to different coach' },
+          404: { description: 'Coach or sessions not found' },
+          409: { description: 'Some sessions are already included in a payment' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin or manager role' },
+        },
+      },
+    },
+    '/payments/{paymentId}/mark-paid': {
+      post: {
+        summary: 'Mark payment as paid',
+        description: 'Mark a payment invoice as paid with optional payment details. Requires admin or manager role.',
+        tags: ['Payments'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'paymentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  paymentMethod: {
+                    type: 'string',
+                    description: 'Payment method used (e.g., bank-transfer, credit-card)',
+                  },
+                  paymentReference: {
+                    type: 'string',
+                    description: 'Payment transaction reference',
+                  },
+                  paidAt: {
+                    type: 'string',
+                    format: 'date-time',
+                    description: 'Payment date (defaults to now)',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Payment marked as paid',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Payment' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Payment is already marked as paid' },
+          404: { description: 'Payment not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin or manager role' },
+        },
+      },
+    },
+    '/payments/{paymentId}/invoice/download': {
+      get: {
+        summary: 'Download invoice',
+        description: 'Download payment invoice. Currently returns invoice data (PDF generation placeholder). Requires admin, manager, or coach role.',
+        tags: ['Payments'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'paymentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Invoice data retrieved (PDF generation not implemented)',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        invoice: { $ref: '#/components/schemas/Payment' },
+                        message: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Payment not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+        },
+      },
+    },
+    '/payments/{paymentId}/invoice/send': {
+      post: {
+        summary: 'Send invoice via email',
+        description: 'Send invoice to coach via email. Currently a placeholder (email sending not implemented). Requires admin or manager role.',
+        tags: ['Payments'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'paymentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Invoice send logged (email not actually sent)',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string' },
+                        sentAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Payment or coach not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin or manager role' },
+        },
+      },
+    },
+    '/payments/stats': {
+      get: {
+        summary: 'Get payment statistics',
+        description: 'Get aggregated payment statistics including counts, totals by status, and revenue metrics. Supports filtering by coach and date range. Available to admin, manager, and coach roles.',
+        tags: ['Payments'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'coachId',
+            in: 'query',
+            schema: { type: 'string', format: 'ObjectId' },
+            description: 'Filter by coach (coaches automatically filtered to their own)',
+          },
+          {
+            name: 'startDate',
+            in: 'query',
+            schema: { type: 'string', format: 'date-time' },
+            description: 'Filter from date',
+          },
+          {
+            name: 'endDate',
+            in: 'query',
+            schema: { type: 'string', format: 'date-time' },
+            description: 'Filter to date',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Payment statistics retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        total: { type: 'number', description: 'Total number of payments' },
+                        byStatus: {
+                          type: 'object',
+                          additionalProperties: {
+                            type: 'object',
+                            properties: {
+                              count: { type: 'number' },
+                              total: { type: 'number' },
+                            },
+                          },
+                        },
+                        revenue: {
+                          type: 'object',
+                          properties: {
+                            totalRevenue: { type: 'number' },
+                            totalAmount: { type: 'number' },
+                            totalTax: { type: 'number' },
+                            averagePayment: { type: 'number' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+        },
+      },
+    },
+    '/notifications/unread-count': {
+      get: {
+        summary: 'Get unread notification count',
+        description: 'Get count of unread notifications for the current user.',
+        tags: ['Notifications'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Unread count retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        count: { type: 'number' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/notifications/mark-all-read': {
+      post: {
+        summary: 'Mark all notifications as read',
+        description: 'Mark all unread notifications as read for the current user.',
+        tags: ['Notifications'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'All notifications marked as read',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        modifiedCount: { type: 'number', description: 'Number of notifications marked as read' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/notifications/{notificationId}': {
+      delete: {
+        summary: 'Delete notification',
+        description: 'Delete a notification. Users can only delete their own notifications.',
+        tags: ['Notifications'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'notificationId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        responses: {
+          204: { description: 'Notification deleted successfully' },
+          404: { description: 'Notification not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - can only delete own notifications' },
         },
       },
     },
@@ -1917,6 +2671,110 @@ export const manualEndpoints = {
         },
       },
     },
+    '/sessions/{sessionId}/status': {
+      patch: {
+        summary: 'Update session status',
+        description: 'Update session status independently. Auto-sets endTime when marked as completed. Requires admin, manager, or coach role.',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'sessionId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: {
+                    type: 'string',
+                    enum: ['scheduled', 'rescheduled', 'in_progress', 'completed', 'cancelled', 'no_show'],
+                    description: 'New session status',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Session status updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Session' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Session not found' },
+          400: { description: 'Invalid status' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+        },
+      },
+    },
+    '/sessions/{sessionId}/rating': {
+      post: {
+        summary: 'Rate a completed session',
+        description: 'Add a rating (1-5 stars) with optional comment to a completed session. Available to all roles.',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'sessionId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['score'],
+                properties: {
+                  score: { type: 'number', minimum: 1, maximum: 5, description: 'Rating score (1-5 stars)' },
+                  comment: { type: 'string', description: 'Optional comment about the session' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Session rated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Session' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid rating or session not completed' },
+          404: { description: 'Session not found' },
+          401: { description: 'Unauthorized' },
+        },
+      },
+    },
     '/sessions/{sessionId}/notes': {
       get: {
         summary: 'List session notes',
@@ -1998,6 +2856,261 @@ export const manualEndpoints = {
         responses: {
           201: { description: 'Session note created' },
           403: { description: 'Forbidden - not allowed to write note' },
+        },
+      },
+      patch: {
+        summary: 'Add role-based notes to session',
+        description: 'Add notes specific to coach, entrepreneur, or manager role. Role-based access control applies.',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'sessionId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'ObjectId' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['role', 'notes'],
+                properties: {
+                  role: {
+                    type: 'string',
+                    enum: ['coach', 'entrepreneur', 'manager'],
+                    description: 'Role-specific notes field',
+                  },
+                  notes: {
+                    type: 'string',
+                    description: 'Notes content',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Role-based notes added successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: { $ref: '#/components/schemas/Session' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid role or missing notes' },
+          404: { description: 'Session not found' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - role mismatch' },
+        },
+      },
+    },
+    '/dashboard/manager': {
+      get: {
+        summary: 'Manager-specific dashboard',
+        description: 'Get comprehensive statistics for managers including overview, sessions, goals, revenue, and recent activity. Requires admin or manager role.',
+        tags: ['Dashboard'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Manager dashboard data retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        overview: {
+                          type: 'object',
+                          properties: {
+                            totalSessions: { type: 'number' },
+                            activeSessions: { type: 'number' },
+                            completedSessions: { type: 'number' },
+                            activeGoals: { type: 'number' },
+                            completedGoals: { type: 'number' },
+                            pendingPayments: { type: 'number' },
+                            totalRevenue: { type: 'number' },
+                            completionRate: { type: 'number' },
+                            totalUsers: { type: 'number' },
+                          },
+                        },
+                        sessionsByStatus: {
+                          type: 'object',
+                          additionalProperties: { type: 'number' },
+                        },
+                        goalsByPriority: {
+                          type: 'object',
+                          additionalProperties: { type: 'number' },
+                        },
+                        sessionsByMonth: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              month: { type: 'string' },
+                              count: { type: 'number' },
+                            },
+                          },
+                        },
+                        revenueByWeek: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              week: { type: 'string' },
+                              revenue: { type: 'number' },
+                            },
+                          },
+                        },
+                        recentSessions: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Session' },
+                        },
+                        upcomingSessions: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Session' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires admin or manager role' },
+        },
+      },
+    },
+    '/dashboard/coach': {
+      get: {
+        summary: 'Coach-specific dashboard',
+        description: 'Get coach dashboard with upcoming sessions, active goals, payment info, and performance metrics. Requires coach role.',
+        tags: ['Dashboard'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Coach dashboard data retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        overview: {
+                          type: 'object',
+                          properties: {
+                            upcomingSessionsCount: { type: 'number' },
+                            completedSessionsCount: { type: 'number' },
+                            activeGoalsCount: { type: 'number' },
+                            pendingPaymentsCount: { type: 'number' },
+                            totalEarned: { type: 'number' },
+                            averageRating: { type: 'number' },
+                          },
+                        },
+                        nextSession: { $ref: '#/components/schemas/Session' },
+                        upcomingSessions: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Session' },
+                        },
+                        activeGoals: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Goal' },
+                        },
+                        pendingPayments: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Payment' },
+                        },
+                        recentSessions: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Session' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires coach role' },
+        },
+      },
+    },
+    '/dashboard/entrepreneur': {
+      get: {
+        summary: 'Entrepreneur-specific dashboard',
+        description: 'Get entrepreneur dashboard with goals, sessions, and progress summary. Requires entrepreneur role.',
+        tags: ['Dashboard'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Entrepreneur dashboard data retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        overview: {
+                          type: 'object',
+                          properties: {
+                            activeGoalsCount: { type: 'number' },
+                            completedGoalsCount: { type: 'number' },
+                            upcomingSessionsCount: { type: 'number' },
+                            completedMilestones: { type: 'number' },
+                            averageProgress: { type: 'number' },
+                          },
+                        },
+                        nextSession: { $ref: '#/components/schemas/Session' },
+                        upcomingSessions: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Session' },
+                        },
+                        activeGoals: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Goal' },
+                        },
+                        recentSessions: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Session' },
+                        },
+                        progressSummary: {
+                          type: 'object',
+                          properties: {
+                            averageProgress: { type: 'number' },
+                            totalMilestones: { type: 'number' },
+                            completedMilestones: { type: 'number' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden - requires entrepreneur role' },
         },
       },
     },

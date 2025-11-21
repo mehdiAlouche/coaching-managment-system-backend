@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { ErrorFactory } from '../_shared/errors/AppError';
 
 export const validate = (schema: z.ZodType<any, any>) => async (
   req: Request,
@@ -15,13 +16,12 @@ export const validate = (schema: z.ZodType<any, any>) => async (
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        message: 'Validation error',
-        errors: error.issues.map((e) => ({
-          path: e.path.join('.'),
-          message: e.message,
-        })),
-      });
+      const validationErrors = error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }));
+      
+      return next(ErrorFactory.validation('Validation failed', validationErrors));
     }
     next(error);
   }

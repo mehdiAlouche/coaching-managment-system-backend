@@ -20,13 +20,19 @@ export interface ISessionNotes {
   summary?: string;
   actionItems?: string[];
   privateNotes?: string;
+  coachNotes?: string;
+  entrepreneurNotes?: string;
+  managerNotes?: string;
 }
 
 export interface ISessionRating {
   score?: number;
   feedback?: string;
+  comment?: string;
   submittedBy?: Types.ObjectId;
+  ratedBy?: Types.ObjectId;
   submittedAt?: Date;
+  ratedAt?: Date;
 }
 
 export interface ISession extends Document {

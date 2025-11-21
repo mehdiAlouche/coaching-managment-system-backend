@@ -6,6 +6,7 @@ import { connectDB } from './config/db';
 import routes from './routes';
 import { apiLimiter } from './middleware/rateLimit';
 import { swaggerSpec, manualEndpoints } from './config/swagger';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 dotenv.config();
 
@@ -48,6 +49,12 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecWithPaths, { sw
 
 // attach routes with versioned base path
 app.use('/api/v1', routes);
+
+// 404 handler for undefined routes
+app.use(notFoundHandler);
+
+// Centralized error handler (must be last)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
