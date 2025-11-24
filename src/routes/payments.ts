@@ -20,7 +20,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ErrorFactory } from '../_shared/errors/AppError';
 import { HttpStatus } from '../_shared/enums/httpStatus';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
 // GET /payments - List all payments with optional filters
 router.get(
@@ -34,10 +34,16 @@ router.get(
       const orgId = authReq.user?.organizationId;
       const userId = authReq.user?.userId || authReq.user?._id;
       const userRole = authReq.user?.role;
+      const { userId: paramUserId } = req.params;
       const { limit, page, skip, sort } = buildPagination(req.query);
 
       // Build query filters
       const query: any = { organizationId: orgId };
+
+      // Filter by user if accessed via nested route
+      if (paramUserId) {
+        query.coachId = paramUserId;
+      }
 
       // Coaches can only see their own payments
       if (userRole === 'coach') {
@@ -480,9 +486,9 @@ router.get(
   })
 );
 
-// POST /payments/:paymentId/invoice/send - Send invoice via email (placeholder)
+// POST /payments/:paymentId/send - Send invoice via email
 router.post(
-  '/:paymentId/invoice/send',
+  '/:paymentId/send',
   requireAuth,
   requireSameOrganization,
   requireRole('admin', 'manager'),

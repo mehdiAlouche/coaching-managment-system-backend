@@ -21,7 +21,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ErrorFactory } from '../_shared/errors/AppError';
 import { HttpStatus } from '../_shared/enums/httpStatus';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
 // GET /sessions - List all sessions with optional filters
 router.get(
@@ -33,10 +33,20 @@ router.get(
     try {
       const authReq = req as AuthRequest;
       const orgId = authReq.user?.organizationId;
+      const { userId } = req.params;
       const { limit, page, skip, sort } = buildPagination(req.query);
 
       // Build query filters
       const query: any = { organizationId: orgId };
+
+      // Filter by user if accessed via nested route
+      if (userId) {
+        query.$or = [
+          { coachId: userId },
+          { entrepreneurId: userId },
+          { managerId: userId }
+        ];
+      }
 
       // Filter by status
       if (req.query.status) {
@@ -78,6 +88,155 @@ router.get(
       res.status(500).json({ message: 'Failed to fetch sessions' });
     }
   }
+);
+
+// POST /sessions/check-conflict - Check for scheduling conflicts
+router.post(
+  '/check-conflict',
+  requireAuth,
+  requireSameOrganization,
+  validate(sessionConflictSchema),
+  requireRole('admin', 'manager', 'coach'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { coachId, scheduledAt, duration, excludeSessionId } = req.body;
+    const orgId = req.user?.organizationId;
+
+    // Verify coach exists
+    const coach = await UserModel.findOne({ _id: coachId, organizationId: orgId, role: 'coach' });
+    if (!coach) {
+      throw ErrorFactory.badRequest('Invalid coach ID', 'INVALID_COACH');
+    }
+
+    const scheduledAtDate = new Date(scheduledAt);
+    const endTime = new Date(scheduledAtDate.getTime() + duration * 60000);
+
+    const hasConflict = await SessionModel.checkConflict(
+      coachId,
+      scheduledAtDate,
+      endTime,
+      excludeSessionId
+    );
+
+    if (hasConflict) {
+      // Find the conflicting session
+      const conflictingSession = await SessionModel.findOne({
+        coachId: new Types.ObjectId(coachId),
+        status: { $in: ['scheduled', 'rescheduled', 'in_progress'] },
+        _id: excludeSessionId ? { $ne: new Types.ObjectId(excludeSessionId) } : undefined,
+        $or: [
+          { scheduledAt: { $lt: endTime }, endTime: { $gt: scheduledAtDate } },
+          { scheduledAt: { $gte: scheduledAtDate, $lt: endTime } },
+        ],
+      })
+        .populate('entrepreneurId', 'firstName lastName')
+        .lean()
+        .then((session: any) => {
+          if (!session) return null;
+          return {
+            ...session,
+            entrepreneur: session.entrepreneurId,
+            entrepreneurId: undefined,
+          };
+        });
+
+      res.json({
+        success: true,
+        data: {
+          hasConflict: true,
+          conflictingSession,
+        },
+      });
+    } else {
+      res.json({
+        success: true,
+        data: {
+          hasConflict: false,
+        },
+      });
+    }
+  })
+);
+
+// GET /sessions/calendar - Calendar view of sessions
+router.get(
+  '/calendar',
+  requireAuth,
+  requireSameOrganization,
+  requireRole('admin', 'manager', 'coach', 'entrepreneur'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const orgId = req.user?.organizationId;
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    
+    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const view = (req.query.view as string) || 'month';
+
+    // Calculate date range
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    // Build query
+    const query: any = {
+      organizationId: orgId,
+      scheduledAt: { $gte: startDate, $lte: endDate },
+    };
+
+    // Filter by role
+    if (userRole === 'coach') {
+      query.coachId = userId;
+    } else if (userRole === 'entrepreneur') {
+      query.entrepreneurId = userId;
+    }
+
+    // Additional filters
+    if (req.query.coachId) {
+      query.coachId = req.query.coachId;
+    }
+    if (req.query.entrepreneurId) {
+      query.entrepreneurId = req.query.entrepreneurId;
+    }
+    if (req.query.status) {
+      query.status = req.query.status;
+    }
+
+    const sessions = await SessionModel.find(query)
+      .sort({ scheduledAt: 1 })
+      .populate('coachId', 'firstName lastName email')
+      .populate('entrepreneurId', 'firstName lastName email startupName')
+      .populate('managerId', 'firstName lastName email')
+      .lean()
+      .then((sessions) => 
+        sessions.map((session: any) => ({
+          ...session,
+          entrepreneur: session.entrepreneurId,
+          manager: session.managerId,
+          entrepreneurId: undefined,
+          managerId: undefined,
+        }))
+      );
+
+    // Group by date
+    const calendar: Record<string, any[]> = {};
+    sessions.forEach((session) => {
+      const dateKey = session.scheduledAt.toISOString().split('T')[0];
+      if (!calendar[dateKey]) {
+        calendar[dateKey] = [];
+      }
+      calendar[dateKey].push(session);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        calendar,
+        month,
+        year,
+        view,
+        total: sessions.length,
+      },
+    });
+  })
 );
 
 // GET /sessions/:sessionId - Get one session
@@ -398,155 +557,6 @@ router.patch(
       .lean();
 
     res.json({ success: true, data: updatedSession });
-  })
-);
-
-// POST /sessions/check-conflict - Check for scheduling conflicts
-router.post(
-  '/check-conflict',
-  requireAuth,
-  requireSameOrganization,
-  validate(sessionConflictSchema),
-  requireRole('admin', 'manager', 'coach'),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { coachId, scheduledAt, duration, excludeSessionId } = req.body;
-    const orgId = req.user?.organizationId;
-
-    // Verify coach exists
-    const coach = await UserModel.findOne({ _id: coachId, organizationId: orgId, role: 'coach' });
-    if (!coach) {
-      throw ErrorFactory.badRequest('Invalid coach ID', 'INVALID_COACH');
-    }
-
-    const scheduledAtDate = new Date(scheduledAt);
-    const endTime = new Date(scheduledAtDate.getTime() + duration * 60000);
-
-    const hasConflict = await SessionModel.checkConflict(
-      coachId,
-      scheduledAtDate,
-      endTime,
-      excludeSessionId
-    );
-
-    if (hasConflict) {
-      // Find the conflicting session
-      const conflictingSession = await SessionModel.findOne({
-        coachId: new Types.ObjectId(coachId),
-        status: { $in: ['scheduled', 'rescheduled', 'in_progress'] },
-        _id: excludeSessionId ? { $ne: new Types.ObjectId(excludeSessionId) } : undefined,
-        $or: [
-          { scheduledAt: { $lt: endTime }, endTime: { $gt: scheduledAtDate } },
-          { scheduledAt: { $gte: scheduledAtDate, $lt: endTime } },
-        ],
-      })
-        .populate('entrepreneurId', 'firstName lastName')
-        .lean()
-        .then((session: any) => {
-          if (!session) return null;
-          return {
-            ...session,
-            entrepreneur: session.entrepreneurId,
-            entrepreneurId: undefined,
-          };
-        });
-
-      res.json({
-        success: true,
-        data: {
-          hasConflict: true,
-          conflictingSession,
-        },
-      });
-    } else {
-      res.json({
-        success: true,
-        data: {
-          hasConflict: false,
-        },
-      });
-    }
-  })
-);
-
-// GET /sessions/calendar - Calendar view of sessions
-router.get(
-  '/calendar',
-  requireAuth,
-  requireSameOrganization,
-  requireRole('admin', 'manager', 'coach', 'entrepreneur'),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const orgId = req.user?.organizationId;
-    const userId = req.user?.userId;
-    const userRole = req.user?.role;
-    
-    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
-    const view = (req.query.view as string) || 'month';
-
-    // Calculate date range
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59);
-
-    // Build query
-    const query: any = {
-      organizationId: orgId,
-      scheduledAt: { $gte: startDate, $lte: endDate },
-    };
-
-    // Filter by role
-    if (userRole === 'coach') {
-      query.coachId = userId;
-    } else if (userRole === 'entrepreneur') {
-      query.entrepreneurId = userId;
-    }
-
-    // Additional filters
-    if (req.query.coachId) {
-      query.coachId = req.query.coachId;
-    }
-    if (req.query.entrepreneurId) {
-      query.entrepreneurId = req.query.entrepreneurId;
-    }
-    if (req.query.status) {
-      query.status = req.query.status;
-    }
-
-    const sessions = await SessionModel.find(query)
-      .sort({ scheduledAt: 1 })
-      .populate('coachId', 'firstName lastName email')
-      .populate('entrepreneurId', 'firstName lastName email startupName')
-      .populate('managerId', 'firstName lastName email')
-      .lean()
-      .then((sessions) => 
-        sessions.map((session: any) => ({
-          ...session,
-          entrepreneur: session.entrepreneurId,
-          manager: session.managerId,
-          entrepreneurId: undefined,
-          managerId: undefined,
-        }))
-      );
-
-    // Group by date
-    const calendar: Record<string, any[]> = {};
-    sessions.forEach((session) => {
-      const dateKey = session.scheduledAt.toISOString().split('T')[0];
-      if (!calendar[dateKey]) {
-        calendar[dateKey] = [];
-      }
-      calendar[dateKey].push(session);
-    });
-
-    res.json({
-      success: true,
-      data: {
-        calendar,
-        month,
-        year,
-        view,
-        total: sessions.length,
-      },
-    });
   })
 );
 

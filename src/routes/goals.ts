@@ -22,7 +22,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ErrorFactory } from '../_shared/errors/AppError';
 import { HttpStatus } from '../_shared/enums/httpStatus';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
 // GET /goals - List all goals with optional filters
 router.get(
@@ -36,9 +36,19 @@ router.get(
       const orgId = authReq.user?.organizationId;
       const userId = authReq.user?.userId || authReq.user?._id;
       const userRole = authReq.user?.role;
+      const { userId: paramUserId } = req.params;
 
       // Build query filters
       const query: any = { organizationId: orgId, isArchived: false };
+
+      // Filter by user if accessed via nested route
+      if (paramUserId) {
+        query.$or = [
+          { entrepreneurId: paramUserId },
+          { coachId: paramUserId },
+          { 'collaborators.userId': paramUserId }
+        ];
+      }
 
       // Entrepreneurs can only see their own goals
       if (userRole === 'entrepreneur') {

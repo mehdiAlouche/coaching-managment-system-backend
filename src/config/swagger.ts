@@ -1499,10 +1499,10 @@ export const manualEndpoints = {
         },
       },
     },
-    '/payments/{paymentId}/invoice/send': {
+    '/payments/{paymentId}/send': {
       post: {
-        summary: 'Send invoice via email',
-        description: 'Send invoice to coach via email. Currently a placeholder (email sending not implemented). Requires admin or manager role.',
+        summary: 'Send invoice email',
+        description: 'Send (or log sending of) an invoice email to the coach for this payment. Placeholder implementation; records a reminder entry. Requires admin or manager role.',
         tags: ['Payments'],
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -1511,11 +1511,12 @@ export const manualEndpoints = {
             in: 'path',
             required: true,
             schema: { type: 'string', format: 'ObjectId' },
+            description: 'Payment ID whose invoice will be emailed',
           },
         ],
         responses: {
           200: {
-            description: 'Invoice send logged (email not actually sent)',
+            description: 'Invoice email action logged',
             content: {
               'application/json': {
                 schema: {
@@ -3344,6 +3345,92 @@ export const manualEndpoints = {
             },
           },
           400: { description: 'Missing query param' },
+        },
+      },
+    },
+    '/users/{userId}/sessions': {
+      get: {
+        summary: 'List sessions for user',
+        description: 'Return sessions where the specified user participates (as coach, entrepreneur, or manager). Supports same filters as /sessions.',
+        tags: ['Sessions', 'Users'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' }, description: 'User ID whose related sessions to list' },
+          { name: 'limit', in: 'query', schema: { type: 'number', default: 20, minimum: 1, maximum: 100 } },
+          { name: 'page', in: 'query', schema: { type: 'number', default: 1, minimum: 1 } },
+          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['scheduled', 'completed', 'cancelled', 'no_show', 'rescheduled'] } },
+          { name: 'upcoming', in: 'query', schema: { type: 'boolean' } },
+        ],
+        responses: {
+          200: {
+            description: 'User sessions retrieved',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'array', items: { $ref: '#/components/schemas/Session' } },
+                    meta: { type: 'object', properties: { total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' } } },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden' },
+        },
+      },
+    },
+    '/users/{userId}/goals': {
+      get: {
+        summary: 'List goals for user',
+        description: 'Return goals where the specified user is entrepreneur, assigned coach, or collaborator. Filters mirror /goals.',
+        tags: ['Goals', 'Users'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' } },
+          { name: 'priority', in: 'query', schema: { type: 'string', enum: ['low', 'medium', 'high'] } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['not_started', 'in_progress', 'completed', 'blocked'] } },
+        ],
+        responses: {
+          200: {
+            description: 'User goals retrieved',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Goal' } }, count: { type: 'number' } } },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden' },
+        },
+      },
+    },
+    '/users/{userId}/payments': {
+      get: {
+        summary: 'List payments for coach',
+        description: 'Return payments filtered to the specified coach ID. Other user roles will typically produce an empty set.',
+        tags: ['Payments', 'Users'],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' }, description: 'Coach user ID' },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'paid', 'failed', 'refunded', 'void'] } },
+          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'number', default: 20, minimum: 1, maximum: 100 } },
+          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
+        ],
+        responses: {
+          200: {
+            description: 'User payments retrieved',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Payment' } }, meta: { type: 'object', properties: { total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' } } } } },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Forbidden' },
         },
       },
     },

@@ -9,8 +9,16 @@ import { UserModel } from '../modules/user/model/user.model';
 import { AuthRequest } from '../middleware/auth';
 import { createUserSchema, updateUserSchema, userParamsSchema, userRoleUpdateSchema } from '../modules/validation/schemas';
 import { buildPagination } from '../_shared/utils/pagination';
+import sessionRouter from './sessions';
+import goalRouter from './goals';
+import paymentRouter from './payments';
 
 const router = Router();
+
+// Mount nested routes
+router.use('/:userId/sessions', sessionRouter);
+router.use('/:userId/goals', goalRouter);
+router.use('/:userId/payments', paymentRouter);
 
 // GET /users - List all active users (admin/manager only)
 router.get(
