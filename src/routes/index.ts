@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth';
-import userRoutes from './user';
+import userRoutes from './users';
 import sessionsRoutes from './sessions';
 import goalsRoutes from './goals';
 import paymentsRoutes from './payments';
@@ -15,7 +15,6 @@ import rolesRoutes from './roles';
 import uploadRoutes from './upload';
 import notificationsRoutes from './notifications';
 import meRoutes from './me';
-import sessionNotesRoutes from './sessionNotes';
 import searchRoutes from './search';
 
 const router = Router();
@@ -24,7 +23,6 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/roles', rolesRoutes);
-router.use('/sessions/:sessionId/notes', sessionNotesRoutes);
 router.use('/sessions', sessionsRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/payments', paymentsRoutes);

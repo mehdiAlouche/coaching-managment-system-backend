@@ -1,0 +1,120 @@
+import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
+import bcrypt from 'bcryptjs';
+import { requireAuth, AuthRequest } from '../../middleware/auth';
+import { requireSameOrganization } from '../../middleware/organizationScope';
+import { requireRole } from '../../middleware/roleCheck';
+import { validate } from '../../middleware/validate';
+import { UserModel } from '../../modules/user/model/user.model';
+import { createUserSchema } from '../../modules/validation/schemas';
+import { buildPagination } from '../../_shared/utils/pagination';
+
+const router = Router({ mergeParams: true });
+
+// GET /users - List all active users (admin/manager only)
+router.get(
+  '/',
+  requireAuth,
+  requireSameOrganization,
+  requireRole('admin', 'manager'),
+  async (req: Request, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const organizationId = authReq.user?.organizationId;
+      const { limit, page, skip, sort } = buildPagination(req.query);
+
+      if (!organizationId) {
+        return res.status(400).json({ message: 'Organization ID not found' });
+      }
+
+      const users = await UserModel.find({
+        organizationId,
+        isActive: true,
+      })
+        .select('-password')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      const total = await UserModel.countDocuments({
+        organizationId,
+        isActive: true,
+      });
+
+      return res.json({
+        data: users,
+        meta: {
+          total,
+          page,
+          limit,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+);
+
+// POST /users - Create user
+router.post(
+  '/',
+  requireAuth,
+  requireSameOrganization,
+  validate(createUserSchema),
+  requireRole('admin', 'manager'),
+  async (req: Request, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const organizationId = authReq.user?.organizationId;
+
+      const { email, password, role, firstName, lastName, hourlyRate, startupName, phone, timezone } = req.body;
+
+      // Check if user already exists in this organization
+      const existingUser = await UserModel.findOne({
+        email,
+        organizationId,
+      });
+
+      if (existingUser) {
+        return res.status(409).json({ message: 'User with this email already exists in your organization' });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Validate role-specific fields
+      if (role === 'coach' && !hourlyRate) {
+        return res.status(400).json({ message: 'Hourly rate is required for coaches' });
+      }
+
+      if (role === 'entrepreneur' && !startupName) {
+        return res.status(400).json({ message: 'Startup name is required for entrepreneurs' });
+      }
+
+      const user = await UserModel.create({
+        email,
+        password: hashedPassword,
+        role,
+        organizationId: new Types.ObjectId(organizationId),
+        firstName,
+        lastName,
+        hourlyRate: role === 'coach' ? hourlyRate : undefined,
+        startupName: role === 'entrepreneur' ? startupName : undefined,
+        phone,
+        timezone,
+        isActive: true,
+      });
+
+      const userResponse = await UserModel.findById(user._id).select('-password').lean();
+
+      res.status(201).json(userResponse);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+);
+
+export default router;
