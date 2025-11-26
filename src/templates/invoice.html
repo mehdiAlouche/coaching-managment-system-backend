@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice {{invoiceNumber}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            line-height: 1.6;
+            padding: 40px;
+            background: #fff;
+        }
+        
+        .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #2563eb;
+        }
+        
+        .logo-section h1 {
+            font-size: 28px;
+            color: #2563eb;
+            margin-bottom: 5px;
+        }
+        
+        .logo-section p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .invoice-info {
+            text-align: right;
+        }
+        
+        .invoice-info h2 {
+            font-size: 32px;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        
+        .invoice-info p {
+            font-size: 14px;
+            color: #6b7280;
+            margin: 3px 0;
+        }
+        
+        .invoice-info .invoice-number {
+            font-weight: bold;
+            color: #2563eb;
+            font-size: 16px;
+        }
+        
+        .billing-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .billing-block h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .billing-block p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .billing-block .name {
+            font-weight: 600;
+            font-size: 16px;
+            color: #1f2937;
+        }
+        
+        .line-items {
+            margin-bottom: 30px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        thead {
+            background-color: #f3f4f6;
+        }
+        
+        thead th {
+            padding: 12px;
+            text-align: left;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #6b7280;
+            font-weight: 600;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        tbody td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 14px;
+        }
+        
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .totals {
+            margin-left: auto;
+            width: 300px;
+            margin-top: 20px;
+        }
+        
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+        
+        .totals-row.subtotal {
+            color: #6b7280;
+        }
+        
+        .totals-row.tax {
+            color: #6b7280;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .totals-row.total {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1f2937;
+            padding-top: 12px;
+            border-top: 2px solid #2563eb;
+        }
+        
+        .payment-info {
+            background-color: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        
+        .payment-info h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .payment-info p {
+            font-size: 14px;
+            margin: 5px 0;
+        }
+        
+        .notes {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            border-radius: 4px;
+        }
+        
+        .notes h3 {
+            font-size: 14px;
+            color: #92400e;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        .notes p {
+            font-size: 13px;
+            color: #78350f;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-pending {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-paid {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-void {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-section">
+                <h1>{{organizationName}}</h1>
+                <p>Coaching Management System</p>
+            </div>
+            <div class="invoice-info">
+                <h2>INVOICE</h2>
+                <p class="invoice-number">{{invoiceNumber}}</p>
+                <p>Date: {{invoiceDate}}</p>
+                <p>Due: {{dueDate}}</p>
+                <p><span class="status-badge status-{{status}}">{{statusLabel}}</span></p>
+            </div>
+        </div>
+        
+        <!-- Billing Information -->
+        <div class="billing-section">
+            <div class="billing-block">
+                <h3>Bill To</h3>
+                <p class="name">{{coachName}}</p>
+                <p>{{coachEmail}}</p>
+                {{#if coachPhone}}
+                <p>{{coachPhone}}</p>
+                {{/if}}
+            </div>
+            <div class="billing-block">
+                <h3>Invoice Period</h3>
+                {{#if period}}
+                <p>From: {{periodStart}}</p>
+                <p>To: {{periodEnd}}</p>
+                {{else}}
+                <p>Single Period Invoice</p>
+                {{/if}}
+            </div>
+        </div>
+        
+        <!-- Line Items -->
+        <div class="line-items">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50%;">Description</th>
+                        <th style="width: 15%;" class="text-right">Duration</th>
+                        <th style="width: 15%;" class="text-right">Rate</th>
+                        <th style="width: 20%;" class="text-right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each lineItems}}
+                    <tr>
+                        <td>{{description}}</td>
+                        <td class="text-right">{{duration}} min</td>
+                        <td class="text-right">{{currency}}{{rate}}/hr</td>
+                        <td class="text-right">{{currency}}{{amount}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Totals -->
+        <div class="totals">
+            <div class="totals-row subtotal">
+                <span>Subtotal:</span>
+                <span>{{currency}}{{amount}}</span>
+            </div>
+            <div class="totals-row tax">
+                <span>Tax:</span>
+                <span>{{currency}}{{taxAmount}}</span>
+            </div>
+            <div class="totals-row total">
+                <span>Total Amount:</span>
+                <span>{{currency}}{{totalAmount}}</span>
+            </div>
+        </div>
+        
+        <!-- Payment Information -->
+        <div class="payment-info">
+            <h3>Payment Information</h3>
+            <p><strong>Currency:</strong> {{currency}}</p>
+            {{#if paidAt}}
+            <p><strong>Paid On:</strong> {{paidDate}}</p>
+            {{else}}
+            <p><strong>Payment Due:</strong> {{dueDate}}</p>
+            {{/if}}
+        </div>
+        
+        <!-- Notes -->
+        {{#if notes}}
+        <div class="notes">
+            <h3>Notes</h3>
+            <p>{{notes}}</p>
+        </div>
+        {{/if}}
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>Thank you for your coaching services!</p>
+            <p>{{organizationName}} | Invoice generated on {{generatedDate}}</p>
+        </div>
+    </div>
+</body>
+</html>

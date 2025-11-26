@@ -8,16 +8,15 @@ Once your server is running, access the interactive Swagger UI:
 http://localhost:5000/api-docs
 ```
 
-Or if running on port 5000:
-```
-http://localhost:5000/api-docs
-```
+**Base URL:** All endpoints are prefixed with `/api/v1`
+
+Example: `http://localhost:5000/api/v1/users`
 
 ---
 
 ## 📋 All Endpoints Summary
 
-### Authentication (`/auth`)
+### Authentication (`/api/v1/auth`)
 
 | Method | Endpoint | Auth Required | Description |
 |--------|----------|---------------|-------------|
@@ -31,76 +30,222 @@ http://localhost:5000/api-docs
 
 ---
 
-### Sessions (`/sessions`)
+### Users (`/api/v1/users`)
+
+| Method | Endpoint | Auth Required | Roles | Description |
+|--------|----------|---------------|-------|-------------|
+| GET | `/users` | ✅ | admin, manager | List all users (supports role filtering) |
+| GET | `/users/profile` | ✅ | all | Get current user's profile |
+| POST | `/users` | ✅ | admin, manager | Create a new user |
+| GET | `/users/:userId` | ✅ | admin, manager | Get specific user details |
+| PUT | `/users/:userId` | ✅ | admin, manager | Full update of user |
+| PATCH | `/users/:userId` | ✅ | admin, manager | Partial update of user |
+| DELETE | `/users/:userId` | ✅ | admin, manager | Soft delete user (set isActive=false) |
+
+**Query Parameters (GET /users):**
+- `role` (string) - Filter by role: `coach`, `entrepreneur`, `manager`, `admin`
+- `limit` (number, default: 20, max: 100) - Results per page
+- `page` (number, default: 1) - Page number (1-based)
+
+**Example:**
+```
+GET /api/v1/users?role=coach&limit=10&page=1
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "email": "coach@example.com",
+      "role": "coach",
+      "firstName": "John",
+      "lastName": "Doe",
+      "hourlyRate": 100,
+      "isActive": true
+    }
+  ],
+  "meta": {
+    "total": 15,
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+
+**Note:** `/api/v1/me` is now an alias that redirects to `/api/v1/users/profile`
+
+---
+
+### Sessions (`/api/v1/sessions`)
 
 | Method | Endpoint | Auth Required | Description |
 |--------|----------|---------------|-------------|
-| GET | `/sessions?limit=5&page=1` | ✅ | List paginated sessions for organization |
+| GET | `/sessions` | ✅ | List paginated sessions for organization |
+| POST | `/sessions` | ✅ | Create a new session |
+| GET | `/sessions/:sessionId` | ✅ | Get session details |
+| PUT | `/sessions/:sessionId` | ✅ | Full update of session |
+| PATCH | `/sessions/:sessionId` | ✅ | Partial update of session |
+| DELETE | `/sessions/:sessionId` | ✅ | Delete session |
+| **POST** | **`/sessions/:sessionId/rating`** | ✅ | **Submit session rating/feedback (entrepreneur)** |
 
 **Query Parameters:**
 - `limit` (number, default: 20, max: 100) - Results per page
 - `page` (number, default: 1) - Page number (1-based)
 
-**Response:**
-```json
+**New Rating Endpoint:**
+```bash
+POST /api/v1/sessions/:sessionId/rating
+Content-Type: application/json
+Authorization: Bearer <token>
+
 {
-  "data": [ { session objects } ],
-  "meta": { "total": 50, "page": 1, "limit": 20 }
+  "score": 5,
+  "comment": "Excellent coaching session!",
+  "feedback": "Very helpful insights on product-market fit. The coach provided actionable advice."
 }
 ```
 
+**Rating Response:**
+```json
+{
+  "message": "Rating submitted successfully",
+  "rating": {
+    "score": 5,
+    "comment": "Excellent coaching session!",
+    "feedback": "Very helpful insights...",
+    "submittedBy": "507f1f77bcf86cd799439013",
+    "submittedAt": "2025-11-26T10:30:00.000Z"
+  }
+}
+```
+
+**Notes:**
+- Only entrepreneurs can rate their own sessions (or admin/manager)
+- Session must be in `completed` status to be rated
+- Rating includes: `score` (1-5), `comment` (short), `feedback` (detailed)
+
 ---
 
-### Dashboard (`/dashboard`)
+### Payments & Invoices (`/api/v1/payments`)
+
+| Method | Endpoint | Auth Required | Roles | Description |
+|--------|----------|---------------|-------|-------------|
+| GET | `/payments` | ✅ | admin, manager, coach | List all payments |
+| POST | `/payments` | ✅ | admin, manager | Create invoice |
+| POST | `/payments/generate` | ✅ | admin, manager | Auto-generate invoice from sessions |
+| GET | `/payments/stats` | ✅ | admin, manager, coach | Payment statistics |
+| GET | `/payments/:paymentId` | ✅ | admin, manager, coach | Get payment details |
+| PATCH | `/payments/:paymentId` | ✅ | admin, manager | Update payment status |
+| **GET** | **`/payments/:paymentId/invoice`** | ✅ | **admin, manager, coach** | **Download invoice as PDF** |
+| **POST** | **`/payments/:paymentId/send-invoice`** | ✅ | **admin, manager** | **Email invoice to coach** |
+
+**New Invoice Endpoints:**
+
+**1. Download Invoice PDF:**
+```bash
+GET /api/v1/payments/:paymentId/invoice
+Authorization: Bearer <token>
+```
+
+Returns a PDF file for download with proper headers:
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename="invoice-INV-001.pdf"`
+
+**2. Send Invoice via Email:**
+```bash
+POST /api/v1/payments/:paymentId/send-invoice
+Authorization: Bearer <token>
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Invoice email queued for sending",
+  "data": {
+    "paymentId": "507f1f77bcf86cd799439030",
+    "invoiceNumber": "INV-001",
+    "recipient": "coach@example.com",
+    "sentAt": "2025-11-26T10:30:00.000Z"
+  }
+}
+```
+
+**Invoice Features:**
+- Server-side PDF generation using Puppeteer
+- Professional HTML template with organization branding
+- Line items with session details, duration, rate
+- Tax calculations and totals
+- Payment status badges (pending, paid, void)
+- Email delivery with PDF attachment
+
+---
+
+### Goals (`/api/v1/goals`)
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | `/goals` | ✅ | List goals |
+| POST | `/goals` | ✅ | Create goal |
+| GET | `/goals/:goalId` | ✅ | Get goal details |
+| PATCH | `/goals/:goalId` | ✅ | Update goal |
+| DELETE | `/goals/:goalId` | ✅ | Delete goal |
+
+---
+
+### Dashboard (`/api/v1/dashboard`)
 
 | Method | Endpoint | Auth Required | Description |
 |--------|----------|---------------|-------------|
 | GET | `/dashboard/stats` | ✅ | Get organization statistics |
-
-**Response:**
-```json
-{
-  "users": { "total": 12, "coaches": 3, "entrepreneurs": 9 },
-  "sessions": { "total": 45, "upcoming": 8, "completed": 35 },
-  "revenue": { "total": 15240.50 }
-}
-```
+| GET | `/dashboard/coach` | ✅ | Coach-specific dashboard |
+| GET | `/dashboard/entrepreneur` | ✅ | Entrepreneur-specific dashboard |
+| GET | `/dashboard/manager` | ✅ | Manager-specific dashboard |
 
 ---
 
-### Users (`/users`)
+### Organizations (`/api/v1/organization`)
 
 | Method | Endpoint | Auth Required | Description |
 |--------|----------|---------------|-------------|
-| GET | `/users` | ✅ | List active users in organization (admin/manager only) |
+| GET | `/organization` | ✅ | Get current organization |
+| PATCH | `/organization` | ✅ | Update organization settings |
 
-**Access Control:**
-- Only `admin` and `manager` roles can access this endpoint
-- Returns only users from the authenticated user's organization
-- Only active users (`isActive: true`) are returned
+---
 
-**Response:**
-```json
-{
-  "users": [
-    {
-      "_id": "507f1f77bcf86cd799439011",
-      "email": "john.doe@example.com",
-      "role": "coach",
-      "firstName": "John",
-      "lastName": "Doe",
-      "organizationId": "507f1f77bcf86cd799439012",
-      "hourlyRate": 75,
-      "isActive": true,
-      "createdAt": "2024-01-15T10:30:00.000Z",
-      "updatedAt": "2024-01-15T10:30:00.000Z"
-    }
-  ],
-  "count": 1
-}
-```
+### Notifications (`/api/v1/notifications`)
 
-**Note:** The `password` field is excluded from the response for security.
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | `/notifications` | ✅ | List user notifications |
+| PATCH | `/notifications/:id` | ✅ | Mark notification as read |
+
+---
+
+### Startups (`/api/v1/startups`)
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | `/startups` | ✅ | List startups |
+| GET | `/startups/:startupId` | ✅ | Get startup details |
+
+---
+
+### Search (`/api/v1/search`)
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | `/search` | ✅ | Global search across entities |
+
+---
+
+### File Upload (`/api/v1/upload`)
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| POST | `/upload` | ✅ | Upload file |
 
 ---
 
@@ -127,7 +272,7 @@ Content-Type: application/json
 
 2. Use the token in subsequent requests:
 ```bash
-GET /api/v1/auth/me
+GET /api/v1/users/profile
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
@@ -135,6 +280,36 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - Valid for: 24 hours
 - Contains: userId, email, role, organizationId
 - Issued by: `/auth/login` and `/auth/register`
+
+---
+
+## 📝 Key Changes in v1 API
+
+### ✅ Consolidated Endpoints
+
+**Before:**
+- `GET /api/coaches` - List coaches
+- `GET /api/entrepreneurs` - List entrepreneurs  
+- `GET /api/me/*` - Various "me" endpoints
+
+**After (v1):**
+- `GET /api/v1/users?role=coach` - List coaches
+- `GET /api/v1/users?role=entrepreneur` - List entrepreneurs
+- `GET /api/v1/users/profile` - Current user profile
+- `GET /api/v1/me` - Alias to `/users/profile` (convenience)
+
+### 🆕 New Features
+
+1. **Invoice PDF Generation** - Server-side PDF creation using Puppeteer
+2. **Invoice Email Delivery** - Event-driven email endpoint with tracking
+3. **Session Rating System** - Structured feedback with score, comment, and detailed feedback
+4. **Role Filtering** - Filter users by any role: `?role=coach|entrepreneur|manager|admin`
+
+### 🔒 Security Improvements
+
+- No public email sending endpoints (email is event-driven via `/send-invoice`)
+- Proper authorization checks on invoice downloads (coaches see only their own)
+- Rate limiting on all authentication endpoints
 
 ---
 

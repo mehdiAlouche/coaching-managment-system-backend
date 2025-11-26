@@ -724,11 +724,12 @@ export const manualEndpoints = {
     },
     '/users': {
       get: {
-        summary: 'List users in organization',
-        description: 'Get list of active users in the authenticated user\'s organization. Only admin and manager roles can access. Returns users sorted by creation date (newest first).',
+        summary: 'List users in organization (consolidated)',
+        description: 'Get list of active users in the authenticated user\'s organization with optional role filtering. Replaces /coaches and /entrepreneurs endpoints. Only admin and manager roles can access.',
         tags: ['Users'],
         security: [{ bearerAuth: [] }],
         parameters: [
+          { name: 'role', in: 'query', schema: { type: 'string', enum: ['coach', 'entrepreneur', 'manager', 'admin'] }, description: 'Filter by user role (e.g., ?role=coach)' },
           { name: 'page', in: 'query', schema: { type: 'number', default: 1, minimum: 1 } },
           { name: 'limit', in: 'query', schema: { type: 'number', default: 20, minimum: 1, maximum: 100 } },
           { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
@@ -822,6 +823,25 @@ export const manualEndpoints = {
           409: { description: 'User with this email already exists' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden - requires admin or manager role' },
+        },
+      },
+    },
+    '/users/profile': {
+      get: {
+        summary: 'Get current user profile',
+        description: 'Retrieve the authenticated user\'s profile. Replaces GET /me endpoint. Also available at /me as an alias.',
+        tags: ['Users'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'User profile retrieved',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/User' },
+              },
+            },
+          },
+          401: { description: 'Unauthorized' },
         },
       },
     },
@@ -1458,10 +1478,10 @@ export const manualEndpoints = {
         },
       },
     },
-    '/payments/{paymentId}/invoice/download': {
+    '/payments/{paymentId}/invoice': {
       get: {
-        summary: 'Download invoice',
-        description: 'Download payment invoice. Currently returns invoice data (PDF generation placeholder). Requires admin, manager, or coach role.',
+        summary: 'Download invoice PDF',
+        description: 'Generate and download professional invoice PDF using Puppeteer. Coaches can only download their own invoices. Returns PDF file with proper headers.',
         tags: ['Payments'],
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -1474,35 +1494,35 @@ export const manualEndpoints = {
         ],
         responses: {
           200: {
-            description: 'Invoice data retrieved (PDF generation not implemented)',
+            description: 'Invoice PDF generated and returned',
             content: {
-              'application/json': {
+              'application/pdf': {
                 schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean' },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        invoice: { $ref: '#/components/schemas/Payment' },
-                        message: { type: 'string' },
-                      },
-                    },
-                  },
+                  type: 'string',
+                  format: 'binary',
                 },
+              },
+            },
+            headers: {
+              'Content-Type': {
+                schema: { type: 'string', example: 'application/pdf' },
+              },
+              'Content-Disposition': {
+                schema: { type: 'string', example: 'attachment; filename="invoice-INV-001.pdf"' },
               },
             },
           },
           404: { description: 'Payment not found' },
           401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden - requires admin, manager, or coach role' },
+          403: { description: 'Forbidden - coaches can only download their own invoices' },
+          500: { description: 'PDF generation failed' },
         },
       },
     },
-    '/payments/{paymentId}/send': {
+    '/payments/{paymentId}/send-invoice': {
       post: {
-        summary: 'Send invoice email',
-        description: 'Send (or log sending of) an invoice email to the coach for this payment. Placeholder implementation; records a reminder entry. Requires admin or manager role.',
+        summary: 'Send invoice via email',
+        description: 'Event-driven endpoint to generate invoice PDF and send it to the coach via email. Updates remindersSent array. Requires admin or manager role. Email service must be configured for production use.',
         tags: ['Payments'],
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -1516,17 +1536,20 @@ export const manualEndpoints = {
         ],
         responses: {
           200: {
-            description: 'Invoice email action logged',
+            description: 'Invoice email queued successfully',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    success: { type: 'boolean' },
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Invoice email queued for sending' },
                     data: {
                       type: 'object',
                       properties: {
-                        message: { type: 'string' },
+                        paymentId: { type: 'string', format: 'ObjectId' },
+                        invoiceNumber: { type: 'string', example: 'INV-001' },
+                        recipient: { type: 'string', format: 'email', example: 'coach@example.com' },
                         sentAt: { type: 'string', format: 'date-time' },
                       },
                     },
@@ -1538,6 +1561,7 @@ export const manualEndpoints = {
           404: { description: 'Payment or coach not found' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden - requires admin or manager role' },
+          500: { description: 'Email sending failed' },
         },
       },
     },
@@ -2013,157 +2037,6 @@ export const manualEndpoints = {
           404: { description: 'Payment not found' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/coaches': {
-      get: {
-        summary: 'List all coaches',
-        description: 'Get list of all active coaches in the organization.',
-        tags: ['Coaches'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'Coaches retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: { $ref: '#/components/schemas/User' },
-                    },
-                    count: { type: 'number' },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/coaches/{coachId}': {
-      get: {
-        summary: 'Get one coach',
-        description: 'Retrieve a single coach with statistics (upcoming sessions, completed sessions, etc.).',
-        tags: ['Coaches'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'coachId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        responses: {
-          200: {
-            description: 'Coach retrieved with stats',
-            content: {
-              'application/json': {
-                schema: {
-                  allOf: [
-                    { $ref: '#/components/schemas/User' },
-                    {
-                      type: 'object',
-                      properties: {
-                        stats: {
-                          type: 'object',
-                          properties: {
-                            upcomingSessions: { type: 'number' },
-                            completedSessions: { type: 'number' },
-                            totalSessions: { type: 'number' },
-                          },
-                        },
-                      },
-                    },
-                  ],
-                },
-              },
-            },
-          },
-          404: { description: 'Coach not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/entrepreneurs': {
-      get: {
-        summary: 'List all entrepreneurs',
-        description: 'Get list of all active entrepreneurs in the organization.',
-        tags: ['Entrepreneurs'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'Entrepreneurs retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: { $ref: '#/components/schemas/User' },
-                    },
-                    count: { type: 'number' },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/entrepreneurs/{entrepreneurId}': {
-      get: {
-        summary: 'Get one entrepreneur',
-        description: 'Retrieve a single entrepreneur with statistics. Entrepreneurs can only see their own profile.',
-        tags: ['Entrepreneurs'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'entrepreneurId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        responses: {
-          200: {
-            description: 'Entrepreneur retrieved with stats',
-            content: {
-              'application/json': {
-                schema: {
-                  allOf: [
-                    { $ref: '#/components/schemas/User' },
-                    {
-                      type: 'object',
-                      properties: {
-                        stats: {
-                          type: 'object',
-                          properties: {
-                            upcomingSessions: { type: 'number' },
-                            completedSessions: { type: 'number' },
-                            activeGoals: { type: 'number' },
-                            completedGoals: { type: 'number' },
-                          },
-                        },
-                      },
-                    },
-                  ],
-                },
-              },
-            },
-          },
-          404: { description: 'Entrepreneur not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden - access denied' },
         },
       },
     },
@@ -2747,8 +2620,8 @@ export const manualEndpoints = {
     },
     '/sessions/{sessionId}/rating': {
       post: {
-        summary: 'Rate a completed session',
-        description: 'Add a rating (1-5 stars) with optional comment to a completed session. Available to all roles.',
+        summary: 'Submit session rating and feedback',
+        description: 'Submit structured feedback for a completed session. Includes score (1-5), short comment, and detailed feedback. Only entrepreneurs can rate their sessions (or admin/manager). Session must be completed.',
         tags: ['Sessions'],
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -2767,8 +2640,14 @@ export const manualEndpoints = {
                 type: 'object',
                 required: ['score'],
                 properties: {
-                  score: { type: 'number', minimum: 1, maximum: 5, description: 'Rating score (1-5 stars)' },
-                  comment: { type: 'string', description: 'Optional comment about the session' },
+                  score: { type: 'number', minimum: 1, maximum: 5, description: 'Rating score (1-5)' },
+                  comment: { type: 'string', description: 'Optional short comment' },
+                  feedback: { type: 'string', description: 'Optional detailed feedback' },
+                },
+                example: {
+                  score: 5,
+                  comment: 'Excellent session!',
+                  feedback: 'Very helpful insights on product-market fit. The coach provided actionable advice.'
                 },
               },
             },
@@ -2776,20 +2655,30 @@ export const manualEndpoints = {
         },
         responses: {
           200: {
-            description: 'Session rated successfully',
+            description: 'Rating submitted successfully',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    success: { type: 'boolean' },
-                    data: { $ref: '#/components/schemas/Session' },
+                    message: { type: 'string', example: 'Rating submitted successfully' },
+                    rating: {
+                      type: 'object',
+                      properties: {
+                        score: { type: 'number' },
+                        comment: { type: 'string' },
+                        feedback: { type: 'string' },
+                        submittedBy: { type: 'string', format: 'ObjectId' },
+                        submittedAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
                   },
                 },
               },
             },
           },
-          400: { description: 'Invalid rating or session not completed' },
+          400: { description: 'Invalid rating score (must be 1-5) or session not completed' },
+          403: { description: 'Forbidden - can only rate own sessions' },
           404: { description: 'Session not found' },
           401: { description: 'Unauthorized' },
         },
@@ -3236,80 +3125,6 @@ export const manualEndpoints = {
           200: { description: 'Notification marked as read' },
           404: { description: 'Notification not found' },
         },
-      },
-    },
-    '/me/sessions': {
-      get: {
-        summary: 'Get my sessions',
-        description: 'Return paginated sessions for the authenticated user (role aware).',
-        tags: ['Me'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-        ],
-        responses: {
-          200: { description: 'Sessions retrieved' },
-        },
-      },
-    },
-    '/me/goals': {
-      get: {
-        summary: 'Get my goals',
-        description: 'Return paginated goals where the current user is the entrepreneur or coach.',
-        tags: ['Me'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-        ],
-        responses: {
-          200: { description: 'Goals retrieved' },
-        },
-      },
-    },
-    '/me/startup': {
-      get: {
-        summary: 'Get my startup',
-        description: 'Return startup info and teammates for the authenticated entrepreneur.',
-        tags: ['Me'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: { description: 'Startup retrieved' },
-          404: { description: 'Startup not found' },
-        },
-      },
-    },
-    '/me/payments': {
-      get: {
-        summary: 'Get my payments',
-        description: 'Return paginated payments for the current coach. Other roles receive an empty list.',
-        tags: ['Me'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-        ],
-        responses: {
-          200: { description: 'Payments retrieved (possibly empty)' },
-        },
-      },
-    },
-    '/me/notifications': {
-      get: {
-        summary: 'Get my notifications',
-        description: 'Same shape as /notifications but always scoped to the current user.',
-        tags: ['Me'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-        ],
-        responses: { 200: { description: 'Notifications retrieved' } },
       },
     },
     '/search': {

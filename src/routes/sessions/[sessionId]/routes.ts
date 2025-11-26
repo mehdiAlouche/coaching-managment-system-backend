@@ -174,4 +174,68 @@ router.delete(
   }
 );
 
+// POST /sessions/:sessionId/rating - Submit session rating/feedback (entrepreneur only)
+router.post(
+  '/rating',
+  requireAuth,
+  requireSameOrganization,
+  requireRole('entrepreneur', 'admin', 'manager'),
+  async (req: Request, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const orgId = authReq.user?.organizationId;
+      const userId = authReq.user?.userId || authReq.user?._id;
+      const { sessionId } = req.params;
+      const { score, comment, feedback } = req.body;
+
+      // Validation
+      if (!score || score < 1 || score > 5) {
+        return res.status(400).json({ message: 'Rating score must be between 1 and 5' });
+      }
+
+      const session = await SessionModel.findOne({ _id: sessionId, organizationId: orgId });
+      if (!session) {
+        return res.status(404).json({ message: 'Session not found' });
+      }
+
+      // Only the entrepreneur assigned to the session can rate it (unless admin/manager)
+      const userRole = authReq.user?.role;
+      if (userRole === 'entrepreneur' && session.entrepreneurId.toString() !== userId?.toString()) {
+        return res.status(403).json({ message: 'You can only rate sessions you participated in' });
+      }
+
+      // Session must be completed to be rated
+      if (session.status !== 'completed') {
+        return res.status(400).json({ message: 'Only completed sessions can be rated' });
+      }
+
+      // Update rating
+      session.rating = {
+        score,
+        comment: comment || '',
+        feedback: feedback || '',
+        submittedBy: new Types.ObjectId(userId),
+        submittedAt: new Date(),
+      };
+
+      await session.save();
+
+      const updatedSession = await SessionModel.findById(session._id)
+        .populate('coachId', 'firstName lastName email')
+        .populate('entrepreneurId', 'firstName lastName email startupName')
+        .populate('managerId', 'firstName lastName email')
+        .select('+rating')
+        .lean();
+
+      res.json({
+        message: 'Rating submitted successfully',
+        rating: updatedSession?.rating,
+      });
+    } catch (err) {
+      console.error('Submit rating error:', err);
+      res.status(500).json({ message: 'Failed to submit rating' });
+    }
+  }
+);
+
 export default router;

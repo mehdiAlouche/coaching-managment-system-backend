@@ -26,13 +26,13 @@ export interface ISessionNotes {
 }
 
 export interface ISessionRating {
-  score?: number;
-  feedback?: string;
-  comment?: string;
-  submittedBy?: Types.ObjectId;
-  ratedBy?: Types.ObjectId;
-  submittedAt?: Date;
-  ratedAt?: Date;
+  score?: number; // 1-5 rating
+  comment?: string; // Short comment
+  feedback?: string; // Detailed feedback
+  submittedBy?: Types.ObjectId; // Who submitted the rating
+  submittedAt?: Date; // When it was submitted
+  ratedBy?: Types.ObjectId; // Deprecated: use submittedBy
+  ratedAt?: Date; // Deprecated: use submittedAt
 }
 
 export interface ISession extends Document {

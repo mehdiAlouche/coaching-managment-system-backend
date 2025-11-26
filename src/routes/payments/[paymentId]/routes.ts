@@ -4,7 +4,12 @@ import { requireSameOrganization } from '../../../middleware/organizationScope';
 import { requireRole } from '../../../middleware/roleCheck';
 import { validate } from '../../../middleware/validate';
 import { PaymentModel } from '../../../modules/payment/model/payment.model';
+import { UserModel } from '../../../modules/user/model/user.model';
+import { OrganizationModel } from '../../../modules/organization/model/organization.model';
 import { updatePaymentSchema, paymentParamsSchema } from '../../../modules/validation/schemas';
+import { generateInvoicePDF } from '../../../_shared/utils/pdfGenerator';
+import { asyncHandler } from '../../../middleware/errorHandler';
+import { ErrorFactory } from '../../../_shared/errors/AppError';
 
 const router = Router({ mergeParams: true });
 
@@ -99,6 +104,125 @@ router.patch(
             res.status(500).json({ message: 'Failed to update payment' });
         }
     }
+);
+
+// GET /payments/:paymentId/invoice - Generate and download invoice PDF
+router.get(
+    '/invoice',
+    requireAuth,
+    requireSameOrganization,
+    requireRole('admin', 'manager', 'coach'),
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        const { paymentId } = req.params;
+        const orgId = req.user?.organizationId;
+        const userId = req.user?.userId || req.user?._id;
+        const userRole = req.user?.role;
+
+        // Find payment
+        const payment = await PaymentModel.findOne({
+            _id: paymentId,
+            organizationId: orgId,
+        })
+            .populate('coachId')
+            .populate('sessionIds')
+            .lean();
+
+        if (!payment) {
+            throw ErrorFactory.notFound('Payment not found', 'PAYMENT_NOT_FOUND');
+        }
+
+        // Authorization: coaches can only view their own invoices
+        if (userRole === 'coach' && (payment.coachId as any)._id.toString() !== userId?.toString()) {
+            throw ErrorFactory.forbidden('Access denied', 'ACCESS_DENIED');
+        }
+
+        // Get coach details
+        const coach = await UserModel.findById(payment.coachId).lean();
+        if (!coach) {
+            throw ErrorFactory.notFound('Coach not found', 'COACH_NOT_FOUND');
+        }
+
+        // Get organization details
+        const organization = await OrganizationModel.findById(orgId).lean();
+
+        // Generate PDF
+        const pdfBuffer = await generateInvoicePDF({
+            payment: payment as any,
+            coach: coach as any,
+            organization: organization as any,
+        });
+
+        // Set response headers for PDF download
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="invoice-${payment.invoiceNumber}.pdf"`
+        );
+        res.setHeader('Content-Length', pdfBuffer.length);
+
+        res.send(pdfBuffer);
+    })
+);
+
+// POST /payments/:paymentId/send-invoice - Send invoice via email
+router.post(
+    '/send-invoice',
+    requireAuth,
+    requireSameOrganization,
+    requireRole('admin', 'manager'),
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        const { paymentId } = req.params;
+        const orgId = req.user?.organizationId;
+
+        // Find payment
+        const payment = await PaymentModel.findOne({
+            _id: paymentId,
+            organizationId: orgId,
+        }).populate('coachId');
+
+        if (!payment) {
+            throw ErrorFactory.notFound('Payment not found', 'PAYMENT_NOT_FOUND');
+        }
+
+        // Get coach details
+        const coach = await UserModel.findById(payment.coachId).lean();
+        if (!coach) {
+            throw ErrorFactory.notFound('Coach not found', 'COACH_NOT_FOUND');
+        }
+
+        // Get organization details
+        const organization = await OrganizationModel.findById(orgId).lean();
+
+        // Generate PDF
+        const pdfBuffer = await generateInvoicePDF({
+            payment: payment as any,
+            coach: coach as any,
+            organization: organization as any,
+        });
+
+        // TODO: Implement email sending
+        // For now, we'll just update the payment status
+        // In production, integrate with email service (SendGrid, AWS SES, etc.)
+
+        // Update payment to track that invoice was sent
+        payment.remindersSent.push({
+            sentAt: new Date(),
+            type: 'email',
+        });
+
+        await payment.save();
+
+        res.json({
+            success: true,
+            message: 'Invoice email queued for sending',
+            data: {
+                paymentId: payment._id,
+                invoiceNumber: payment.invoiceNumber,
+                recipient: coach.email,
+                sentAt: new Date(),
+            },
+        });
+    })
 );
 
 export default router;

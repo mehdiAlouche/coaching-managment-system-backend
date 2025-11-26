@@ -1,7 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IFileAsset extends Document {
-  organizationId?: Types.ObjectId;
+  organizationId: Types.ObjectId;
   uploadedBy?: Types.ObjectId;
   originalName: string;
   filename: string;
@@ -13,7 +13,7 @@ export interface IFileAsset extends Document {
 
 const FileAssetSchema = new Schema<IFileAsset>(
   {
-    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     originalName: { type: String, required: true },
     filename: { type: String, required: true },

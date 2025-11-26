@@ -4,8 +4,6 @@ import userRoutes from './users';
 import sessionsRoutes from './sessions';
 import goalsRoutes from './goals';
 import paymentsRoutes from './payments';
-import coachesRoutes from './coaches';
-import entrepreneursRoutes from './entrepreneurs';
 import startupsRoutes from './startups';
 import dashboardRoutes from './dashboard';
 import activitiesRoutes from './activities';
@@ -14,7 +12,6 @@ import organizationRoutes from './organization';
 import rolesRoutes from './roles';
 import uploadRoutes from './upload';
 import notificationsRoutes from './notifications';
-import meRoutes from './me';
 import searchRoutes from './search';
 
 const router = Router();
@@ -26,17 +23,17 @@ router.use('/roles', rolesRoutes);
 router.use('/sessions', sessionsRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/payments', paymentsRoutes);
-router.use('/coaches', coachesRoutes);
-router.use('/entrepreneurs', entrepreneursRoutes);
 router.use('/startups', startupsRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/activities', activitiesRoutes);
 router.use('/exports', exportsRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/notifications', notificationsRoutes);
-router.use('/me', meRoutes);
 router.use('/search', searchRoutes);
 
-router.get('/', (_req, res) => res.json({ message: 'API root' }));
+// Temporary alias for /me -> /users/profile for convenience
+router.use('/me', userRoutes);
+
+router.get('/', (_req, res) => res.json({ message: 'API v1' }));
 
 export default router;
