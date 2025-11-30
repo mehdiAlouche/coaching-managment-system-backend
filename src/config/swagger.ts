@@ -101,7 +101,8 @@ const options: swaggerJsdoc.Options = {
         AuthResponse: {
           type: 'object',
           properties: {
-            token: { type: 'string', description: 'JWT token (valid for 24h)' },
+            token: { type: 'string', description: 'Access token (default expiry 15 minutes)' },
+            refreshToken: { type: 'string', description: 'Refresh token (default expiry 7 days)' },
             user: { $ref: '#/components/schemas/User' },
           },
         },
@@ -259,7 +260,7 @@ export const manualEndpoints = {
     '/auth/login': {
       post: {
         summary: 'Login user',
-        description: 'Authenticate with email and password, receive JWT token.',
+        description: 'Authenticate with email and password, receive access and refresh tokens.',
         tags: ['Authentication'],
         requestBody: {
           required: true,
@@ -287,6 +288,67 @@ export const manualEndpoints = {
           },
           401: { description: 'Invalid credentials or inactive account' },
           429: { description: 'Too many login attempts (5 per 15 min)' },
+        },
+      },
+    },
+    '/auth/refresh': {
+      post: {
+        summary: 'Refresh access token',
+        description: 'Exchange a valid refresh token for a new access token pair.',
+        tags: ['Authentication'],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['refreshToken'],
+                properties: {
+                  refreshToken: {
+                    type: 'string',
+                    description: 'Refresh token issued during login',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Tokens refreshed successfully',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AuthResponse' },
+              },
+            },
+          },
+          401: { description: 'Invalid or expired refresh token' },
+          429: { description: 'Too many refresh attempts (5 per 15 min)' },
+        },
+      },
+    },
+    '/auth/logout': {
+      post: {
+        summary: 'Logout user',
+        description: 'Invalidate the current user\'s refresh token and access tokens.',
+        tags: ['Authentication'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'User logged out successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    message: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized or invalid token' },
         },
       },
     },

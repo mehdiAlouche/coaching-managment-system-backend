@@ -21,6 +21,7 @@ export interface LoginUserDto {
 
 export interface AuthResponse {
   token: string;
+  refreshToken: string;
   user: {
     id: string;
     email: string;
@@ -29,4 +30,8 @@ export interface AuthResponse {
     firstName?: string;
     lastName?: string;
   };
+}
+
+export interface RefreshTokenDto {
+  refreshToken: string;
 }

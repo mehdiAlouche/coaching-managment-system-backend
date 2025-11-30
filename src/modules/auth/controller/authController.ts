@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticationError, registerUser, authenticateUser, getCurrentUser } from '../service/authService';
-import { RegisterUserDto, LoginUserDto } from '../types/auth.types';
+import { AuthenticationError, registerUser, authenticateUser, getCurrentUser, refreshAccessToken, logout } from '../service/authService';
+import { RegisterUserDto, LoginUserDto, RefreshTokenDto } from '../types/auth.types';
 import { AuthRequest } from '../../../middleware/auth';
 import { ErrorFactory } from '../../../_shared/errors/AppError';
 import { asyncHandler } from '../../../middleware/errorHandler';
@@ -66,6 +66,43 @@ export const getMe = asyncHandler(async (req: AuthRequest, res: Response, next: 
     if (error instanceof AuthenticationError) {
       throw ErrorFactory.unauthorized(error.message, 'USER_NOT_FOUND');
     }
+    throw error;
+  }
+});
+
+export const refresh = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const { refreshToken }: RefreshTokenDto = req.body;
+
+  if (!refreshToken) {
+    throw ErrorFactory.badRequest('Refresh token is required', 'MISSING_REFRESH_TOKEN');
+  }
+
+  try {
+    const result = await refreshAccessToken(refreshToken);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      throw ErrorFactory.unauthorized(error.message, 'REFRESH_TOKEN_INVALID');
+    }
+    throw error;
+  }
+});
+
+export const logoutUser = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user?.userId) {
+    throw ErrorFactory.unauthorized('Not authenticated', 'NOT_AUTHENTICATED');
+  }
+
+  try {
+    await logout(req.user.userId);
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
     throw error;
   }
 });

@@ -13,7 +13,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   if (!token) return res.status(401).json({ message: 'No token provided' });
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as any;
     req.user = payload;
     next();
   } catch (err) {

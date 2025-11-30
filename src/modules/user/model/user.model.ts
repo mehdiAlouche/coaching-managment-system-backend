@@ -14,6 +14,8 @@ export interface IUser extends Document {
   startupName?: string; // entrepreneurs only
   phone?: string;
   timezone?: string;
+  refreshToken?: string;
+  tokenVersion?: number;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -34,6 +36,8 @@ const UserSchema = new Schema<IUser>(
     startupName: { type: String, trim: true },
     phone: { type: String, trim: true },
     timezone: { type: String, trim: true },
+    refreshToken: { type: String, select: false },
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
