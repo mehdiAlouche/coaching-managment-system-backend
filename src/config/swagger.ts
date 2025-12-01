@@ -3288,7 +3288,7 @@ export const manualEndpoints = {
       get: {
         summary: 'List payments for coach',
         description: 'Return payments filtered to the specified coach ID. Other user roles will typically produce an empty set.',
-        tags: ['Payments', 'Users'],
+        tags: ['Users'],
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' }, description: 'Coach user ID' },
