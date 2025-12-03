@@ -52,52 +52,6 @@ router.get(
   }
 );
 
-// PUT /sessions/:sessionId - Full update
-router.put(
-  '/',
-  requireAuth,
-  requireSameOrganization,
-  validate(updateSessionSchema),
-  requireRole('admin', 'manager', 'coach'),
-  async (req: Request, res: Response) => {
-    try {
-      const authReq = req as AuthRequest;
-      const orgId = authReq.user?.organizationId;
-      const { sessionId } = req.params;
-
-      const session = await SessionModel.findOne({ _id: sessionId, organizationId: orgId });
-      if (!session) {
-        return res.status(404).json({ message: 'Session not found' });
-      }
-
-      const { coachId, entrepreneurId, managerId, scheduledAt, duration, agendaItems, location, videoConferenceUrl, status } = req.body;
-
-      if (coachId) session.coachId = new Types.ObjectId(coachId);
-      if (entrepreneurId) session.entrepreneurId = new Types.ObjectId(entrepreneurId);
-      if (managerId) session.managerId = new Types.ObjectId(managerId);
-      if (scheduledAt) session.scheduledAt = new Date(scheduledAt);
-      if (duration) session.duration = duration;
-      if (agendaItems) session.agendaItems = agendaItems;
-      if (location !== undefined) session.location = location;
-      if (videoConferenceUrl !== undefined) session.videoConferenceUrl = videoConferenceUrl;
-      if (status) session.status = status;
-
-      await session.save();
-
-      const updatedSession = await SessionModel.findById(session._id)
-        .populate('coachId', 'firstName lastName email')
-        .populate('entrepreneurId', 'firstName lastName email startupName')
-        .populate('managerId', 'firstName lastName email')
-        .lean();
-
-      res.json(updatedSession);
-    } catch (err) {
-      console.error('Update session error:', err);
-      res.status(500).json({ message: 'Failed to update session' });
-    }
-  }
-);
-
 // PATCH /sessions/:sessionId - Partial update
 router.patch(
   '/',

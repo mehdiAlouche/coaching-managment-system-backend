@@ -61,120 +61,6 @@ router.get(
     }
 );
 
-// PUT /goals/:goalId - Full update
-router.put(
-    '/',
-    requireAuth,
-    requireSameOrganization,
-    validate(updateGoalSchema),
-    requireRole('admin', 'manager', 'coach', 'entrepreneur'),
-    async (req: Request, res: Response) => {
-        try {
-            const authReq = req as AuthRequest;
-            const orgId = authReq.user?.organizationId;
-            const userId = authReq.user?.userId || authReq.user?._id;
-            const userRole = authReq.user?.role;
-            const { goalId } = req.params;
-
-            const goal = await GoalModel.findOne({
-                _id: goalId,
-                organizationId: orgId,
-            });
-
-            if (!goal) {
-                return res.status(404).json({ message: 'Goal not found' });
-            }
-
-            // Role-based access control
-            if (userRole === 'entrepreneur' && goal.entrepreneurId.toString() !== userId?.toString()) {
-                return res.status(403).json({ message: 'Access denied' });
-            }
-
-            if (userRole === 'coach' && goal.coachId.toString() !== userId?.toString()) {
-                return res.status(403).json({ message: 'Access denied' });
-            }
-
-            const { entrepreneurId, coachId, title, description, status, priority, targetDate, milestones, progress } = req.body;
-
-            // Track changes for update log
-            const changes: Record<string, unknown> = {};
-
-            if (entrepreneurId) {
-                const entrepreneur = await UserModel.findOne({ _id: entrepreneurId, organizationId: orgId, role: 'entrepreneur' });
-                if (!entrepreneur) {
-                    return res.status(400).json({ message: 'Invalid entrepreneur ID' });
-                }
-                goal.entrepreneurId = new Types.ObjectId(entrepreneurId);
-                changes.entrepreneurId = entrepreneurId;
-            }
-
-            if (coachId) {
-                const coach = await UserModel.findOne({ _id: coachId, organizationId: orgId, role: 'coach' });
-                if (!coach) {
-                    return res.status(400).json({ message: 'Invalid coach ID' });
-                }
-                goal.coachId = new Types.ObjectId(coachId);
-                changes.coachId = coachId;
-            }
-
-            if (title) {
-                changes.title = { from: goal.title, to: title };
-                goal.title = title;
-            }
-            if (description !== undefined) {
-                changes.description = { from: goal.description, to: description };
-                goal.description = description;
-            }
-            if (status) {
-                changes.status = { from: goal.status, to: status };
-                goal.status = status;
-            }
-            if (priority) {
-                changes.priority = { from: goal.priority, to: priority };
-                goal.priority = priority;
-            }
-            if (targetDate !== undefined) {
-                changes.targetDate = { from: goal.targetDate, to: targetDate };
-                goal.targetDate = targetDate ? new Date(targetDate) : undefined;
-            }
-            if (milestones) {
-                changes.milestones = { from: goal.milestones.length, to: milestones.length };
-                goal.milestones = milestones;
-            }
-            if (progress !== undefined) {
-                changes.progress = { from: goal.progress, to: progress };
-                goal.progress = Math.max(0, Math.min(100, progress));
-            }
-
-            // Add to update log
-            goal.updateLog.push({
-                updatedBy: new Types.ObjectId(userId),
-                updateType: 'updated',
-                message: 'Goal updated',
-                changes,
-                updatedAt: new Date(),
-            });
-
-            await goal.save();
-
-            // Update progress from milestones if milestones were updated
-            if (milestones) {
-                await GoalModel.updateProgressFromMilestones(goal._id);
-            }
-
-            const updatedGoal = await GoalModel.findById(goal._id)
-                .populate('entrepreneurId', 'firstName lastName email startupName')
-                .populate('coachId', 'firstName lastName email')
-                .lean();
-
-            res.json(updatedGoal);
-        } catch (err) {
-            console.error('Update goal error:', err);
-            res.status(500).json({ message: 'Failed to update goal' });
-        }
-    }
-);
-
 // PATCH /goals/:goalId - Partial update (e.g., progress only)
 router.patch(
     '/',
@@ -199,7 +85,7 @@ router.patch(
                 return res.status(404).json({ message: 'Goal not found' });
             }
 
-            // Role-based access control
+            // Role-based access control (admins bypass these checks)
             if (userRole === 'entrepreneur' && goal.entrepreneurId.toString() !== userId?.toString()) {
                 return res.status(403).json({ message: 'Access denied' });
             }
@@ -210,6 +96,18 @@ router.patch(
 
             const { title, description, status, priority, targetDate, progress, milestones } = req.body;
             const changes: Record<string, unknown> = {};
+
+            // Entrepreneurs can ONLY update progress (admins and managers bypass this)
+            if (userRole === 'entrepreneur') {
+                if (title || description || status || priority || targetDate || milestones) {
+                    return res.status(403).json({ message: 'Entrepreneurs can only update progress' });
+                }
+            }
+
+            // Entrepreneurs cannot change status (admins and managers bypass this)
+            if (userRole === 'entrepreneur' && status) {
+                return res.status(403).json({ message: 'Entrepreneurs cannot change goal status' });
+            }
 
             // Update only provided fields
             if (title) {

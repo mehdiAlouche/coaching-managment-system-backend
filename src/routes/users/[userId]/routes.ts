@@ -41,69 +41,6 @@ router.get(
     }
 );
 
-// PUT /users/:userId - Full update
-router.put(
-    '/',
-    requireAuth,
-    requireSameOrganization,
-    validate(updateUserSchema),
-    requireRole('admin', 'manager'),
-    async (req: Request, res: Response) => {
-        try {
-            const authReq = req as AuthRequest;
-            const organizationId = authReq.user?.organizationId;
-            const { userId } = req.params;
-
-            const user = await UserModel.findOne({
-                _id: userId,
-                organizationId,
-            });
-
-            if (!user) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-
-            const { email, password, role, firstName, lastName, hourlyRate, startupName, phone, timezone, isActive } = req.body;
-
-            // If email is being changed, check for conflicts
-            if (email && email !== user.email) {
-                const existingUser = await UserModel.findOne({
-                    email,
-                    organizationId,
-                    _id: { $ne: userId },
-                });
-
-                if (existingUser) {
-                    return res.status(409).json({ message: 'User with this email already exists' });
-                }
-            }
-
-            // Update all fields
-            if (email) user.email = email;
-            if (password) {
-                user.password = await bcrypt.hash(password, 10);
-            }
-            if (role) user.role = role;
-            if (firstName) user.firstName = firstName;
-            if (lastName) user.lastName = lastName;
-            if (hourlyRate !== undefined) user.hourlyRate = hourlyRate;
-            if (startupName !== undefined) user.startupName = startupName;
-            if (phone !== undefined) user.phone = phone;
-            if (timezone !== undefined) user.timezone = timezone;
-            if (isActive !== undefined) user.isActive = isActive;
-
-            await user.save();
-
-            const userResponse = await UserModel.findById(user._id).select('-password').lean();
-
-            res.json(userResponse);
-        } catch (error) {
-            console.error('Error updating user:', error);
-            res.status(500).json({ message: 'Internal server error' });
-        }
-    }
-);
-
 // PATCH /users/:userId - Partial update
 router.patch(
     '/',

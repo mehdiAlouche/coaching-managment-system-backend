@@ -65,7 +65,7 @@ const MilestoneSchema = new Schema<IGoalMilestone>(
     completedAt: { type: Date },
     notes: { type: String },
   },
-  { _id: false, timestamps: false }
+  { timestamps: false }
 );
 
 const CollaboratorSchema = new Schema<IGoalCollaborator>(

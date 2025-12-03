@@ -22,6 +22,8 @@ router.post(
     requireRole('admin', 'manager', 'coach'),
     asyncHandler(async (req: AuthRequest, res: Response) => {
         const orgId = req.user?.organizationId;
+        const userId = req.user?.userId;
+        const userRole = req.user?.role;
         const { goalId } = req.params;
         const { userId: collaboratorUserId, role } = req.body;
 
@@ -32,6 +34,11 @@ router.post(
 
         if (!goal) {
             throw ErrorFactory.notFound('Goal not found', 'GOAL_NOT_FOUND');
+        }
+
+        // Coaches can only add collaborators to goals they coach (admins and managers bypass this)
+        if (userRole === 'coach' && goal.coachId.toString() !== userId?.toString()) {
+            throw ErrorFactory.forbidden('Coaches can only add collaborators to goals they coach', 'INSUFFICIENT_PERMISSIONS');
         }
 
         // Verify user exists in organization

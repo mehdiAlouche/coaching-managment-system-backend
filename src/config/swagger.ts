@@ -101,8 +101,8 @@ const options: swaggerJsdoc.Options = {
         AuthResponse: {
           type: 'object',
           properties: {
-            token: { type: 'string', description: 'Access token (default expiry 15 minutes)' },
-            refreshToken: { type: 'string', description: 'Refresh token (default expiry 7 days)' },
+            token: { type: 'string', description: 'Access token (default expiry 7 days)' },
+            refreshToken: { type: 'string', description: 'Refresh token (default expiry 30 days)' },
             user: { $ref: '#/components/schemas/User' },
           },
         },
@@ -152,6 +152,7 @@ const options: swaggerJsdoc.Options = {
               items: {
                 type: 'object',
                 properties: {
+                  _id: { type: 'string', format: 'ObjectId', description: 'Milestone ID' },
                   title: { type: 'string' },
                   status: { type: 'string' },
                   targetDate: { type: 'string', format: 'date-time' },
@@ -648,55 +649,6 @@ export const manualEndpoints = {
           403: { description: 'Forbidden' },
         },
       },
-      put: {
-        summary: 'Update session',
-        description: 'Full update of a session. Requires admin, manager, or coach role.',
-        tags: ['Sessions'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'sessionId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  coachId: { type: 'string', format: 'ObjectId' },
-                  entrepreneurId: { type: 'string', format: 'ObjectId' },
-                  managerId: { type: 'string', format: 'ObjectId' },
-                  scheduledAt: { type: 'string', format: 'date-time' },
-                  duration: { type: 'number' },
-                  status: { type: 'string', enum: ['scheduled', 'completed', 'cancelled', 'no_show', 'rescheduled'] },
-                  agendaItems: { type: 'array' },
-                  location: { type: 'string' },
-                  videoConferenceUrl: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'Session updated',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Session' },
-              },
-            },
-          },
-          404: { description: 'Session not found' },
-          409: { description: 'Coach has a conflicting session' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
       patch: {
         summary: 'Partial update session',
         description: 'Partial update of a session (e.g., status only). Requires admin, manager, or coach role.',
@@ -792,6 +744,7 @@ export const manualEndpoints = {
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: 'role', in: 'query', schema: { type: 'string', enum: ['coach', 'entrepreneur', 'manager', 'admin'] }, description: 'Filter by user role (e.g., ?role=coach)' },
+          { name: 'isActive', in: 'query', schema: { type: 'string', enum: ['true', 'false'] }, description: 'Filter by active status. By default returns both active and inactive users. Use "true" for active users only, "false" for inactive users only.' },
           { name: 'page', in: 'query', schema: { type: 'number', default: 1, minimum: 1 } },
           { name: 'limit', in: 'query', schema: { type: 'number', default: 20, minimum: 1, maximum: 100 } },
           { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
@@ -888,25 +841,6 @@ export const manualEndpoints = {
         },
       },
     },
-    '/users/profile': {
-      get: {
-        summary: 'Get current user profile',
-        description: 'Retrieve the authenticated user\'s profile. Replaces GET /me endpoint. Also available at /me as an alias.',
-        tags: ['Users'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'User profile retrieved',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/User' },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-        },
-      },
-    },
     '/users/{userId}': {
       get: {
         summary: 'Get one user',
@@ -931,56 +865,6 @@ export const manualEndpoints = {
             },
           },
           404: { description: 'User not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-      put: {
-        summary: 'Update user',
-        description: 'Full update of a user. Requires admin or manager role.',
-        tags: ['Users'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'userId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  email: { type: 'string', format: 'email' },
-                  password: { type: 'string', minLength: 8 },
-                  role: { type: 'string', enum: ['manager', 'coach', 'entrepreneur', 'admin'] },
-                  firstName: { type: 'string' },
-                  lastName: { type: 'string' },
-                  hourlyRate: { type: 'number' },
-                  startupName: { type: 'string' },
-                  phone: { type: 'string' },
-                  timezone: { type: 'string' },
-                  isActive: { type: 'boolean' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'User updated',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/User' },
-              },
-            },
-          },
-          404: { description: 'User not found' },
-          409: { description: 'Email already exists' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden' },
         },
@@ -1122,6 +1006,7 @@ export const manualEndpoints = {
                     items: {
                       type: 'object',
                       properties: {
+                        _id: { type: 'string', format: 'ObjectId', description: 'Milestone ID' },
                         title: { type: 'string' },
                         status: { type: 'string' },
                         targetDate: { type: 'string', format: 'date-time' },
@@ -1479,67 +1364,6 @@ export const manualEndpoints = {
         },
       },
     },
-    '/payments/{paymentId}/mark-paid': {
-      post: {
-        summary: 'Mark payment as paid',
-        description: 'Mark a payment invoice as paid with optional payment details. Requires admin or manager role.',
-        tags: ['Payments'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'paymentId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        requestBody: {
-          required: false,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  paymentMethod: {
-                    type: 'string',
-                    description: 'Payment method used (e.g., bank-transfer, credit-card)',
-                  },
-                  paymentReference: {
-                    type: 'string',
-                    description: 'Payment transaction reference',
-                  },
-                  paidAt: {
-                    type: 'string',
-                    format: 'date-time',
-                    description: 'Payment date (defaults to now)',
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'Payment marked as paid',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean' },
-                    data: { $ref: '#/components/schemas/Payment' },
-                  },
-                },
-              },
-            },
-          },
-          400: { description: 'Payment is already marked as paid' },
-          404: { description: 'Payment not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden - requires admin or manager role' },
-        },
-      },
-    },
     '/payments/{paymentId}/invoice': {
       get: {
         summary: 'Download invoice PDF',
@@ -1697,88 +1521,6 @@ export const manualEndpoints = {
         },
       },
     },
-    '/notifications/unread-count': {
-      get: {
-        summary: 'Get unread notification count',
-        description: 'Get count of unread notifications for the current user.',
-        tags: ['Notifications'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'Unread count retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean' },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        count: { type: 'number' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-        },
-      },
-    },
-    '/notifications/mark-all-read': {
-      post: {
-        summary: 'Mark all notifications as read',
-        description: 'Mark all unread notifications as read for the current user.',
-        tags: ['Notifications'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'All notifications marked as read',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean' },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        modifiedCount: { type: 'number', description: 'Number of notifications marked as read' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-        },
-      },
-    },
-    '/notifications/{notificationId}': {
-      delete: {
-        summary: 'Delete notification',
-        description: 'Delete a notification. Users can only delete their own notifications.',
-        tags: ['Notifications'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'notificationId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        responses: {
-          204: { description: 'Notification deleted successfully' },
-          404: { description: 'Notification not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden - can only delete own notifications' },
-        },
-      },
-    },
     '/goals/{goalId}': {
       get: {
         summary: 'Get one goal',
@@ -1805,54 +1547,6 @@ export const manualEndpoints = {
           404: { description: 'Goal not found' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden - access denied' },
-        },
-      },
-      put: {
-        summary: 'Update goal',
-        description: 'Full update of a goal. Role-based access control applies.',
-        tags: ['Goals'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'goalId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', format: 'ObjectId' },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  entrepreneurId: { type: 'string', format: 'ObjectId' },
-                  coachId: { type: 'string', format: 'ObjectId' },
-                  title: { type: 'string' },
-                  description: { type: 'string' },
-                  status: { type: 'string', enum: ['not_started', 'in_progress', 'completed', 'blocked'] },
-                  priority: { type: 'string', enum: ['low', 'medium', 'high'] },
-                  targetDate: { type: 'string', format: 'date-time' },
-                  progress: { type: 'number', minimum: 0, maximum: 100 },
-                  milestones: { type: 'array' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'Goal updated',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Goal' },
-              },
-            },
-          },
-          404: { description: 'Goal not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
         },
       },
       patch: {
@@ -2102,90 +1796,6 @@ export const manualEndpoints = {
         },
       },
     },
-    '/startups': {
-      get: {
-        summary: 'List all startups',
-        description: 'Get list of all startups (derived from entrepreneurs with startupName).',
-        tags: ['Startups'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'Startups retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          name: { type: 'string' },
-                          entrepreneurs: {
-                            type: 'array',
-                            items: { $ref: '#/components/schemas/User' },
-                          },
-                        },
-                      },
-                    },
-                    meta: {
-                      type: 'object',
-                      properties: {
-                        total: { type: 'number' },
-                        page: { type: 'number' },
-                        limit: { type: 'number' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/startups/{startupId}': {
-      get: {
-        summary: 'Get one startup',
-        description: 'Retrieve a single startup by name (URL-encoded) with all associated entrepreneurs.',
-        tags: ['Startups'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'startupId',
-            in: 'path',
-            required: true,
-            schema: { type: 'string' },
-            description: 'Startup name (URL-encoded, dashes replaced with spaces)',
-          },
-        ],
-        responses: {
-          200: {
-            description: 'Startup retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string' },
-                    entrepreneurs: {
-                      type: 'array',
-                      items: { $ref: '#/components/schemas/User' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          404: { description: 'Startup not found' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
     '/dashboard/sessions': {
       get: {
         summary: 'Session overview chart',
@@ -2305,62 +1915,6 @@ export const manualEndpoints = {
               },
             },
           },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/activities': {
-      get: {
-        summary: 'List recent activity',
-        description: 'Get recent activity feed combining sessions, goals, and payments. Available to all roles.',
-        tags: ['Activity'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'limit',
-            in: 'query',
-            schema: { type: 'number', default: 50, minimum: 1, maximum: 100 },
-            description: 'Number of activities to return',
-          },
-        ],
-        responses: {
-          200: {
-            description: 'Activity feed retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          type: { type: 'string', enum: ['session', 'goal', 'payment'] },
-                          action: { type: 'string' },
-                          timestamp: { type: 'string', format: 'date-time' },
-                          data: { type: 'object' },
-                        },
-                      },
-                    },
-                    count: { type: 'number' },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-      post: {
-        summary: 'Create activity entry',
-        description: 'Create a new activity entry (internal use). Currently returns 501 Not Implemented.',
-        tags: ['Activity'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          501: { description: 'Not implemented' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden' },
         },
@@ -2491,111 +2045,6 @@ export const manualEndpoints = {
           400: { description: 'Invalid file' },
           401: { description: 'Unauthorized' },
           403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/roles': {
-      get: {
-        summary: 'List roles',
-        description: 'Return system roles plus organization-specific custom roles.',
-        tags: ['Roles'],
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: {
-            description: 'Roles retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          _id: { type: 'string' },
-                          name: { type: 'string' },
-                          slug: { type: 'string' },
-                          permissions: { type: 'array', items: { type: 'string' } },
-                          isSystem: { type: 'boolean' },
-                        },
-                      },
-                    },
-                    count: { type: 'number' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      post: {
-        summary: 'Create custom role',
-        description: 'Create an organization-level role with its own permissions.',
-        tags: ['Roles'],
-        security: [{ bearerAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['name'],
-                properties: {
-                  name: { type: 'string' },
-                  slug: { type: 'string' },
-                  permissions: { type: 'array', items: { type: 'string' } },
-                  description: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: { description: 'Role created' },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/roles/{roleId}': {
-      patch: {
-        summary: 'Update role',
-        description: 'Update name, slug, description, or permissions of a role.',
-        tags: ['Roles'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'roleId', in: 'path', required: true, schema: { type: 'string' } }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  slug: { type: 'string' },
-                  permissions: { type: 'array', items: { type: 'string' } },
-                  description: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: { description: 'Role updated' },
-          404: { description: 'Role not found' },
-        },
-      },
-      delete: {
-        summary: 'Delete custom role',
-        description: 'Remove an organization-defined role (system roles cannot be deleted).',
-        tags: ['Roles'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'roleId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: {
-          204: { description: 'Role deleted' },
-          404: { description: 'Role not found' },
-          400: { description: 'Cannot delete system role' },
         },
       },
     },
@@ -2747,91 +2196,9 @@ export const manualEndpoints = {
       },
     },
     '/sessions/{sessionId}/notes': {
-      get: {
-        summary: 'List session notes',
-        description: 'Return notes/attendance/tasks for a session. Entrepreneurs only see shared notes.',
-        tags: ['Sessions'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: {
-          200: {
-            description: 'Notes retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          _id: { type: 'string' },
-                          summary: { type: 'string' },
-                          details: { type: 'string' },
-                          visibility: { type: 'string', enum: ['internal', 'shared'] },
-                          followUpTasks: { type: 'array', items: { type: 'object' } },
-                          attendance: { type: 'object' },
-                          createdAt: { type: 'string', format: 'date-time' },
-                        },
-                      },
-                    },
-                    count: { type: 'number' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      post: {
-        summary: 'Create session note',
-        description: 'Add a coaching note/attendance entry. Coaches can only write notes for their sessions.',
-        tags: ['Sessions'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string' } }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['summary'],
-                properties: {
-                  summary: { type: 'string' },
-                  details: { type: 'string' },
-                  visibility: { type: 'string', enum: ['internal', 'shared'] },
-                  followUpTasks: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        description: { type: 'string' },
-                        dueDate: { type: 'string', format: 'date-time' },
-                        completed: { type: 'boolean' },
-                      },
-                    },
-                  },
-                  attendance: {
-                    type: 'object',
-                    properties: {
-                      present: { type: 'boolean' },
-                      notes: { type: 'string' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: { description: 'Session note created' },
-          403: { description: 'Forbidden - not allowed to write note' },
-        },
-      },
       patch: {
         summary: 'Add role-based notes to session',
-        description: 'Add notes specific to coach, entrepreneur, or manager role. Role-based access control applies.',
+        description: 'Add notes specific to coach, entrepreneur, or manager role. Users can only add notes for their own role (except admin). Must be associated with the session.',
         tags: ['Sessions'],
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -2853,7 +2220,7 @@ export const manualEndpoints = {
                   role: {
                     type: 'string',
                     enum: ['coach', 'entrepreneur', 'manager'],
-                    description: 'Role-specific notes field',
+                    description: 'Role-specific notes field to update',
                   },
                   notes: {
                     type: 'string',
@@ -2873,6 +2240,7 @@ export const manualEndpoints = {
                   type: 'object',
                   properties: {
                     success: { type: 'boolean' },
+                    message: { type: 'string' },
                     data: { $ref: '#/components/schemas/Session' },
                   },
                 },
@@ -2882,7 +2250,7 @@ export const manualEndpoints = {
           400: { description: 'Invalid role or missing notes' },
           404: { description: 'Session not found' },
           401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden - role mismatch' },
+          403: { description: 'Forbidden - can only add notes for your role or not associated with session' },
         },
       },
     },
@@ -3122,192 +2490,6 @@ export const manualEndpoints = {
         responses: {
           204: { description: 'File deleted' },
           404: { description: 'File not found' },
-        },
-      },
-    },
-    '/notifications': {
-      get: {
-        summary: 'List notifications',
-        description: 'Return notifications for the current user (admins can filter by userId). Supports pagination and unread filter.',
-        tags: ['Notifications'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['unread'] } },
-          { name: 'userId', in: 'query', schema: { type: 'string' }, description: 'Admin-only: filter by user' },
-        ],
-        responses: {
-          200: {
-            description: 'Notifications retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          _id: { type: 'string' },
-                          title: { type: 'string' },
-                          message: { type: 'string' },
-                          channel: { type: 'string' },
-                          readAt: { type: 'string', format: 'date-time', nullable: true },
-                          sentAt: { type: 'string', format: 'date-time' },
-                        },
-                      },
-                    },
-                    meta: {
-                      type: 'object',
-                      properties: {
-                        total: { type: 'number' },
-                        page: { type: 'number' },
-                        limit: { type: 'number' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/notifications/{notificationId}/read': {
-      patch: {
-        summary: 'Mark notification as read',
-        description: 'Set readAt timestamp for a notification. Users can only mark their own notifications.',
-        tags: ['Notifications'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'notificationId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: {
-          200: { description: 'Notification marked as read' },
-          404: { description: 'Notification not found' },
-        },
-      },
-    },
-    '/search': {
-      get: {
-        summary: 'Global search',
-        description: 'Search for sessions, users, goals, and startups by keyword. Admin/manager/coach only.',
-        tags: ['Search'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'q', in: 'query', required: true, schema: { type: 'string' }, description: 'Search string' },
-        ],
-        responses: {
-          200: {
-            description: 'Search results',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    query: { type: 'string' },
-                    results: {
-                      type: 'object',
-                      properties: {
-                        sessions: { type: 'array', items: { $ref: '#/components/schemas/Session' } },
-                        users: { type: 'array', items: { $ref: '#/components/schemas/User' } },
-                        goals: { type: 'array', items: { $ref: '#/components/schemas/Goal' } },
-                        startups: { type: 'array', items: { type: 'object' } },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          400: { description: 'Missing query param' },
-        },
-      },
-    },
-    '/users/{userId}/sessions': {
-      get: {
-        summary: 'List sessions for user',
-        description: 'Return sessions where the specified user participates (as coach, entrepreneur, or manager). Supports same filters as /sessions.',
-        tags: ['Sessions', 'Users'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' }, description: 'User ID whose related sessions to list' },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20, minimum: 1, maximum: 100 } },
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1, minimum: 1 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['scheduled', 'completed', 'cancelled', 'no_show', 'rescheduled'] } },
-          { name: 'upcoming', in: 'query', schema: { type: 'boolean' } },
-        ],
-        responses: {
-          200: {
-            description: 'User sessions retrieved',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    data: { type: 'array', items: { $ref: '#/components/schemas/Session' } },
-                    meta: { type: 'object', properties: { total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' } } },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/users/{userId}/goals': {
-      get: {
-        summary: 'List goals for user',
-        description: 'Return goals where the specified user is entrepreneur, assigned coach, or collaborator. Filters mirror /goals.',
-        tags: ['Goals', 'Users'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' } },
-          { name: 'priority', in: 'query', schema: { type: 'string', enum: ['low', 'medium', 'high'] } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['not_started', 'in_progress', 'completed', 'blocked'] } },
-        ],
-        responses: {
-          200: {
-            description: 'User goals retrieved',
-            content: {
-              'application/json': {
-                schema: { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Goal' } }, count: { type: 'number' } } },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
-        },
-      },
-    },
-    '/users/{userId}/payments': {
-      get: {
-        summary: 'List payments for coach',
-        description: 'Return payments filtered to the specified coach ID. Other user roles will typically produce an empty set.',
-        tags: ['Users'],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string', format: 'ObjectId' }, description: 'Coach user ID' },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'paid', 'failed', 'refunded', 'void'] } },
-          { name: 'page', in: 'query', schema: { type: 'number', default: 1 } },
-          { name: 'limit', in: 'query', schema: { type: 'number', default: 20, minimum: 1, maximum: 100 } },
-          { name: 'sort', in: 'query', schema: { type: 'string', default: '-createdAt' } },
-        ],
-        responses: {
-          200: {
-            description: 'User payments retrieved',
-            content: {
-              'application/json': {
-                schema: { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Payment' } }, meta: { type: 'object', properties: { total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' } } } } },
-              },
-            },
-          },
-          401: { description: 'Unauthorized' },
-          403: { description: 'Forbidden' },
         },
       },
     },

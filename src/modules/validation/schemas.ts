@@ -213,31 +213,6 @@ export const organizationUpdateSchema = z.object({
   }),
 });
 
-// Roles schemas
-const roleBodySchema = z.object({
-  name: z.string().min(2),
-  slug: z.string().min(2).optional(),
-  description: z.string().optional(),
-  permissions: z.array(z.string()).optional(),
-});
-
-export const createRoleSchema = z.object({
-  body: roleBodySchema,
-});
-
-export const updateRoleSchema = z.object({
-  params: z.object({
-    roleId: z.string(),
-  }),
-  body: roleBodySchema.partial(),
-});
-
-export const roleParamsSchema = z.object({
-  params: z.object({
-    roleId: z.string(),
-  }),
-});
-
 // Session notes
 export const sessionNoteSchema = z.object({
   params: z.object({
@@ -262,13 +237,6 @@ export const sessionNoteSchema = z.object({
         notes: z.string().optional(),
       })
       .optional(),
-  }),
-});
-
-// Notifications
-export const notificationParamsSchema = z.object({
-  params: z.object({
-    notificationId: z.string(),
   }),
 });
 

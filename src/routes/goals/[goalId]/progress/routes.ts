@@ -34,7 +34,7 @@ router.patch(
             throw ErrorFactory.notFound('Goal not found', 'GOAL_NOT_FOUND');
         }
 
-        // Role-based access control
+        // Role-based access control (admins bypass these checks)
         if (userRole === 'entrepreneur' && goal.entrepreneurId.toString() !== userId?.toString()) {
             throw ErrorFactory.forbidden('Access denied', 'INSUFFICIENT_PERMISSIONS');
         }

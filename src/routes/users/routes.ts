@@ -6,33 +6,40 @@ import { requireSameOrganization } from '../../middleware/organizationScope';
 import { requireRole } from '../../middleware/roleCheck';
 import { validate } from '../../middleware/validate';
 import { UserModel } from '../../modules/user/model/user.model';
+import { GoalModel } from '../../modules/goal/model/goal.model';
 import { createUserSchema } from '../../modules/validation/schemas';
 import { buildPagination } from '../../_shared/utils/pagination';
 
 const router = Router({ mergeParams: true });
 
-// GET /users - List all active users (admin/manager only)
+// GET /users - List users (admin/manager: all users, coach: their entrepreneurs only)
 router.get(
   '/',
   requireAuth,
   requireSameOrganization,
-  requireRole('admin', 'manager'),
+  requireRole('admin', 'manager', 'coach'),
   async (req: Request, res: Response) => {
     try {
       const authReq = req as AuthRequest;
       const organizationId = authReq.user?.organizationId;
+      const userId = authReq.user?.userId || authReq.user?._id;
+      const userRole = authReq.user?.role;
       const { limit, page, skip, sort } = buildPagination(req.query);
-      const { role } = req.query;
+      const { role, isActive } = req.query;
 
       if (!organizationId) {
         return res.status(400).json({ message: 'Organization ID not found' });
       }
 
-      // Build query with optional role filtering
+      // Build query with optional role and isActive filtering
       const query: any = {
         organizationId,
-        isActive: true,
       };
+
+      // Filter by isActive status: ?isActive=true or ?isActive=false (default: return both)
+      if (isActive !== undefined) {
+        query.isActive = isActive === 'true';
+      }
 
       // Support filtering by role: ?role=coach, ?role=entrepreneur, ?role=manager, ?role=admin
       if (role && typeof role === 'string') {
@@ -40,6 +47,19 @@ router.get(
         if (validRoles.includes(role)) {
           query.role = role;
         }
+      }
+
+      // Coaches can only see their entrepreneurs
+      if (userRole === 'coach') {
+        // Find all entrepreneurs this coach is coaching (from goals)
+        const goals = await GoalModel.find({
+          organizationId,
+          coachId: userId,
+        }).distinct('entrepreneurId');
+
+        // Filter to only show entrepreneurs that this coach is coaching
+        query._id = { $in: goals };
+        query.role = 'entrepreneur'; // Force role to entrepreneur for coaches
       }
 
       const users = await UserModel.find(query)
@@ -66,40 +86,6 @@ router.get(
   }
 );
 
-// GET /users/profile - Get current user profile with role-specific data
-router.get(
-  '/profile',
-  requireAuth,
-  requireSameOrganization,
-  async (req: Request, res: Response) => {
-    try {
-      const authReq = req as AuthRequest;
-      const userId = authReq.user?.userId || authReq.user?._id;
-      const organizationId = authReq.user?.organizationId;
-
-      if (!userId || !organizationId) {
-        return res.status(401).json({ message: 'Unauthorized' });
-      }
-
-      // Get user profile
-      const user = await UserModel.findOne({
-        _id: userId,
-        organizationId,
-      })
-        .select('-password')
-        .lean();
-
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      return res.json(user);
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  }
-);
 
 // POST /users - Create user
 router.post(

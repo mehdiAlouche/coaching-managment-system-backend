@@ -86,8 +86,14 @@ router.post(
       const authReq = req as AuthRequest;
       const orgId = authReq.user?.organizationId;
       const userId = authReq.user?.userId || authReq.user?._id;
+      const userRole = authReq.user?.role;
 
       const { entrepreneurId, coachId, title, description, status, priority, targetDate, milestones } = req.body;
+
+      // Coaches can only create goals for their entrepreneurs (admins and managers have no restrictions)
+      if (userRole === 'coach' && coachId !== userId?.toString()) {
+        return res.status(403).json({ message: 'Coaches can only create goals for their own entrepreneurs' });
+      }
 
       // Verify users belong to the same organization
       const [entrepreneur, coach] = await Promise.all([

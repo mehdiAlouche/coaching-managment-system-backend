@@ -103,6 +103,9 @@ const SessionSchema = new Schema<ISession, ISessionModel>(
       summary: { type: String },
       actionItems: { type: [String], default: [] },
       privateNotes: { type: String, select: false },
+      coachNotes: { type: String },
+      entrepreneurNotes: { type: String },
+      managerNotes: { type: String },
     },
     attachments: { type: [AttachmentSchema], default: [] },
     rating: {
