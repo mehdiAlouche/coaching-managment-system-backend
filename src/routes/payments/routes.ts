@@ -28,13 +28,24 @@ router.get(
     try {
       const authReq = req as AuthRequest;
       const orgId = authReq.user?.organizationId;
+      const isAdmin = (authReq as any).isAdmin;
       const userId = authReq.user?.userId || authReq.user?._id;
       const userRole = authReq.user?.role;
       const { userId: paramUserId } = req.params;
-      const { limit, page, skip, sort } = buildPagination(req.query);
+      const { limit, page, skip, sort } = buildPagination(req.query, isAdmin);
+      const { organizationId: queryOrgId } = req.query;
 
       // Build query filters
-      const query: any = { organizationId: orgId };
+      const query: any = {};
+
+      // Admins can query across all orgs or filter by specific org
+      if (isAdmin) {
+        if (queryOrgId && typeof queryOrgId === 'string') {
+          query.organizationId = queryOrgId;
+        }
+      } else {
+        query.organizationId = orgId;
+      }
 
       // Filter by user if accessed via nested route
       if (paramUserId) {

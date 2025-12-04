@@ -9,10 +9,12 @@ export interface PaginationQuery {
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const ADMIN_MAX_LIMIT = 500; // Higher limit for admins
 
-export function buildPagination(query: ParsedQs): PaginationQuery {
+export function buildPagination(query: ParsedQs, isAdmin: boolean = false): PaginationQuery {
+  const maxLimit = isAdmin ? ADMIN_MAX_LIMIT : MAX_LIMIT;
   const rawLimit = typeof query.limit === 'string' ? parseInt(query.limit, 10) : DEFAULT_LIMIT;
-  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(MAX_LIMIT, rawLimit)) : DEFAULT_LIMIT;
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(maxLimit, rawLimit)) : DEFAULT_LIMIT;
 
   const rawPage = typeof query.page === 'string' ? parseInt(query.page, 10) : 1;
   const page = Number.isFinite(rawPage) ? Math.max(1, rawPage) : 1;

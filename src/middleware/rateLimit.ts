@@ -9,6 +9,20 @@ export const apiLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 
+// Admin rate limiter - higher limits for admin operations
+export const adminLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 500, // admins can make more requests for bulk operations
+  message: { message: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for admins
+    const user: any = (req as any).user;
+    return user?.role === 'admin';
+  },
+});
+
 // Stricter rate limit for authentication endpoints
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

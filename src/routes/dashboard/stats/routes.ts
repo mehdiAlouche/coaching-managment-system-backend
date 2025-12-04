@@ -14,18 +14,36 @@ router.get('/', requireAuth, requireSameOrganization, requireRole('admin', 'mana
   try {
     const authReq = req as AuthRequest;
     const orgId = authReq.user?.organizationId;
+    const isAdmin = (authReq as any).isAdmin;
+    const { organizationId: queryOrgId } = req.query;
+
+    // Build query filter
+    const orgFilter: any = {};
+    if (isAdmin) {
+      // Admin can view global stats or filter by specific org
+      if (queryOrgId && typeof queryOrgId === 'string') {
+        orgFilter.organizationId = new Types.ObjectId(queryOrgId);
+      }
+      // Otherwise no org filter (global stats)
+    } else {
+      orgFilter.organizationId = orgId;
+    }
 
     const [totalUsers, coaches, entrepreneurs, totalSessions, upcomingSessions, completedSessions] = await Promise.all([
-      UserModel.countDocuments({ organizationId: orgId, isActive: true }),
-      UserModel.countDocuments({ organizationId: orgId, role: 'coach', isActive: true }),
-      UserModel.countDocuments({ organizationId: orgId, role: 'entrepreneur', isActive: true }),
-      SessionModel.countDocuments({ organizationId: orgId }),
-      SessionModel.countDocuments({ organizationId: orgId, scheduledAt: { $gt: new Date() }, status: { $in: ['scheduled', 'rescheduled'] } }),
-      SessionModel.countDocuments({ organizationId: orgId, status: 'completed' }),
+      UserModel.countDocuments({ ...orgFilter, isActive: true }),
+      UserModel.countDocuments({ ...orgFilter, role: 'coach', isActive: true }),
+      UserModel.countDocuments({ ...orgFilter, role: 'entrepreneur', isActive: true }),
+      SessionModel.countDocuments(orgFilter),
+      SessionModel.countDocuments({ ...orgFilter, scheduledAt: { $gt: new Date() }, status: { $in: ['scheduled', 'rescheduled'] } }),
+      SessionModel.countDocuments({ ...orgFilter, status: 'completed' }),
     ]);
 
+    const revenueMatchFilter = orgFilter.organizationId
+      ? { organizationId: orgFilter.organizationId, status: 'paid' }
+      : { status: 'paid' };
+
     const revenueAgg = await PaymentModel.aggregate([
-      { $match: { organizationId: new Types.ObjectId(orgId), status: 'paid' } },
+      { $match: revenueMatchFilter },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } },
     ]).exec();
 
@@ -35,6 +53,7 @@ router.get('/', requireAuth, requireSameOrganization, requireRole('admin', 'mana
       users: { total: totalUsers, coaches, entrepreneurs },
       sessions: { total: totalSessions, upcoming: upcomingSessions, completed: completedSessions },
       revenue: { total: totalRevenue },
+      scope: isAdmin && !queryOrgId ? 'global' : 'organization',
     });
   } catch (err) {
     console.error('Dashboard stats error:', err);

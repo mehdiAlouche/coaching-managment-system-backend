@@ -24,17 +24,27 @@ router.get(
       const organizationId = authReq.user?.organizationId;
       const userId = authReq.user?.userId || authReq.user?._id;
       const userRole = authReq.user?.role;
-      const { limit, page, skip, sort } = buildPagination(req.query);
-      const { role, isActive } = req.query;
+      const isAdmin = (authReq as any).isAdmin;
+      const { limit, page, skip, sort } = buildPagination(req.query, isAdmin);
+      const { role, isActive, organizationId: queryOrgId } = req.query;
 
-      if (!organizationId) {
-        return res.status(400).json({ message: 'Organization ID not found' });
+      // Build query with optional filters
+      const query: any = {};
+
+      // Admins can query across all orgs or filter by specific org
+      if (isAdmin) {
+        // If admin specifies an org filter, apply it
+        if (queryOrgId && typeof queryOrgId === 'string') {
+          query.organizationId = queryOrgId;
+        }
+        // Otherwise, no org filter (see all users)
+      } else {
+        // Non-admins must filter by their organization
+        if (!organizationId) {
+          return res.status(400).json({ message: 'Organization ID not found' });
+        }
+        query.organizationId = organizationId;
       }
-
-      // Build query with optional role and isActive filtering
-      const query: any = {
-        organizationId,
-      };
 
       // Filter by isActive status: ?isActive=true or ?isActive=false (default: return both)
       if (isActive !== undefined) {
@@ -97,18 +107,37 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const authReq = req as AuthRequest;
-      const organizationId = authReq.user?.organizationId;
+      const userOrgId = authReq.user?.organizationId;
+      const isAdmin = (authReq as any).isAdmin;
 
-      const { email, password, role, firstName, lastName, hourlyRate, startupName, phone, timezone } = req.body;
+      const { email, password, role, organizationId, firstName, lastName, hourlyRate, startupName, phone, timezone } = req.body;
 
-      // Check if user already exists in this organization
+      // Determine target organization
+      let targetOrgId;
+      if (isAdmin && organizationId) {
+        // Admin can create user for any org
+        targetOrgId = organizationId;
+      } else if (isAdmin && !organizationId) {
+        // Admin creating admin user (no org required)
+        targetOrgId = undefined;
+      } else {
+        // Manager can only create for their org
+        targetOrgId = userOrgId;
+      }
+
+      // Validate: only admins can be created without org
+      if (!targetOrgId && role !== 'admin') {
+        return res.status(400).json({ message: 'Organization ID is required for non-admin users' });
+      }
+
+      // Check if user already exists
       const existingUser = await UserModel.findOne({
         email,
-        organizationId,
+        ...(targetOrgId && { organizationId: targetOrgId }),
       });
 
       if (existingUser) {
-        return res.status(409).json({ message: 'User with this email already exists in your organization' });
+        return res.status(409).json({ message: 'User with this email already exists' + (targetOrgId ? ' in this organization' : '') });
       }
 
       // Hash password
@@ -127,7 +156,7 @@ router.post(
         email,
         password: hashedPassword,
         role,
-        organizationId: new Types.ObjectId(organizationId),
+        organizationId: targetOrgId ? new Types.ObjectId(targetOrgId) : undefined,
         firstName,
         lastName,
         hourlyRate: role === 'coach' ? hourlyRate : undefined,
@@ -137,7 +166,10 @@ router.post(
         isActive: true,
       });
 
-      const userResponse = await UserModel.findById(user._id).select('-password').lean();
+      const userResponse = await UserModel.findById(user._id)
+        .select('-password')
+        .populate('organizationId', 'name slug')
+        .lean();
 
       res.status(201).json(userResponse);
     } catch (error) {
